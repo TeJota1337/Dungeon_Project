@@ -1973,7 +1973,9 @@ MonoBehaviour:
   leftHandTransform: {fileID: 361818727}
   rightHandTransform: {fileID: 2122715809}
   bombSpawnPoint: {fileID: 2137920559}
-  giantBombChance: 0.5
+  giantBombChance: 0.05
+  playerColliders:
+  - {fileID: 1521757868}
   slingshotOffset: {x: 0, y: -0.1, z: -0.1}
   leftTriggerAction: {fileID: -5982496924579745919, guid: c348712bda248c246b8c49b3db54643f, type: 3}
   rightTriggerAction: {fileID: 83097790271614945, guid: c348712bda248c246b8c49b3db54643f, type: 3}
@@ -1983,15 +1985,41 @@ MonoBehaviour:
   launchForceMultiplier: 20
   minPullDistance: 0.05
   maxPullDistance: 1
+  pullForceCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   maxSimulationTime: 3
   trajectoryResolution: 100
   trajectoryCollisionMask:
     serializedVersion: 2
     m_Bits: 4294967295
+  minSpin: 90
+  maxSpin: 720
+  breakThreshold: 0.85
+  maxBreakChance: 0.6
   readyColor: {r: 0, g: 1, b: 0, a: 1}
   idleColor: {r: 1, g: 0, b: 0, a: 1}
-  playerColliders:
-  - {fileID: 1521757868}
 --- !u!4 &1968842619
 Transform:
   m_ObjectHideFlags: 0

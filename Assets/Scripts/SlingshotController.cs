@@ -10,10 +10,13 @@ public class SlingshotController : MonoBehaviour
 
     [Header("Bomba Gigante")]
     [Range(0f, 1f)]
-    public float giantBombChance = 0.05f; // 1 em 20 por padrão, ajuste como quiser
+    public float giantBombChance = 0.05f;
+
+    [Header("Colisão a ignorar (corpo do jogador)")]
+    public Collider[] playerColliders;
 
     [Header("Ajuste de posição")]
-    public Vector3 slingshotOffset = new Vector3(0, -0.1f, 0); // ajusta empiricamente
+    public Vector3 slingshotOffset = new Vector3(0, -0.1f, 0);
 
     [Header("Input")]
     public InputActionReference leftTriggerAction;
@@ -28,9 +31,20 @@ public class SlingshotController : MonoBehaviour
     public float launchForceMultiplier = 16f;
     public float minPullDistance = 0.05f;
     public float maxPullDistance = 0.5f;
-    public float maxSimulationTime = 3f;      // tempo máximo simulado, em segundos
-    public int trajectoryResolution = 60;     // quantidade de pontos ao longo desse tempo
+    public AnimationCurve pullForceCurve = AnimationCurve.EaseInOut(0, 0, 1, 1); // resposta do puxão (0=solto, 1=máximo)
+    public float maxSimulationTime = 3f;
+    public int trajectoryResolution = 60;
     public LayerMask trajectoryCollisionMask = ~0;
+
+    [Header("Rotação da Bomba")]
+    public float minSpin = 90f;   // graus/segundo no lançamento mais fraco
+    public float maxSpin = 720f;  // graus/segundo no lançamento mais forte
+
+    [Header("Arrebentar (puxar demais)")]
+    [Range(0f, 1f)]
+    public float breakThreshold = 0.85f;  // % do maxPullDistance a partir do qual existe risco de arrebentar
+    [Range(0f, 1f)]
+    public float maxBreakChance = 0.6f;   // chance de arrebentar bem no limite máximo
 
     [Header("Feedback visual")]
     public Color readyColor = Color.green;
@@ -44,10 +58,6 @@ public class SlingshotController : MonoBehaviour
 
     private bool isRightHandInZone;
     private bool isAiming;
-
-    [Header("Colisão a ignorar (corpo do jogador)")]
-    public Collider[] playerColliders; // arraste aqui o(s) collider(s) do corpo/rig do XR Origin
-
 
     void OnEnable()
     {
@@ -131,8 +141,8 @@ public class SlingshotController : MonoBehaviour
                 bombScript.isGiant = true;
             }
 
-            bombScript.IgnoreCollisionsWith(playerColliders); // 1º: registra o "ignorar" com o collider ainda ativo
-            bombScript.SetCollisionEnabled(false);              // 2º: só então desativa
+            bombScript.IgnoreCollisionsWith(playerColliders); // registra primeiro, com collider ativo
+            bombScript.SetCollisionEnabled(false);              // só então desativa
         }
 
         Rigidbody rb = currentBomb.GetComponent<Rigidbody>();
@@ -153,17 +163,64 @@ public class SlingshotController : MonoBehaviour
 
     void LaunchBomb()
     {
+        Vector3 pullVector = leftHandTransform.position - rightHandTransform.position;
+        float pullDistance = Mathf.Clamp(pullVector.magnitude, 0, maxPullDistance);
+        float normalizedPull = pullDistance / maxPullDistance;
+
+        // checagem de "arrebentar" se passou do threshold
+        if (normalizedPull > breakThreshold)
+        {
+            float overPull = Mathf.InverseLerp(breakThreshold, 1f, normalizedPull);
+            float breakChance = overPull * maxBreakChance;
+
+            if (Random.value < breakChance)
+            {
+                BreakSlingshot();
+                return;
+            }
+        }
+
         Vector3 launchVelocity = GetLaunchVelocity();
 
         Projectile_Bomb bombScript = currentBomb.GetComponent<Projectile_Bomb>();
         if (bombScript != null)
         {
-            bombScript.SetCollisionEnabled(true); // agora sim pode colidir com o mundo
+            bombScript.SetCollisionEnabled(true);
         }
 
         Rigidbody rb = currentBomb.GetComponent<Rigidbody>();
         rb.isKinematic = false;
         rb.linearVelocity = launchVelocity;
+
+        // ROTAÇÃO baseada na força: quanto mais forte, mais spin
+        float speedFactor = Mathf.InverseLerp(0, launchForceMultiplier, launchVelocity.magnitude);
+        float spinAmount = Mathf.Lerp(minSpin, maxSpin, speedFactor);
+
+        Vector3 randomAxis = new Vector3(
+            Random.Range(-1f, 1f),
+            Random.Range(-1f, 1f),
+            Random.Range(-1f, 1f)
+        ).normalized;
+
+        rb.angularVelocity = randomAxis * (spinAmount * Mathf.Deg2Rad);
+
+        currentBomb = null;
+    }
+
+    void BreakSlingshot()
+    {
+        Debug.Log("O estilingue arrebentou! A bomba caiu sem força.");
+
+        Rigidbody rb = currentBomb.GetComponent<Rigidbody>();
+        rb.isKinematic = false;
+
+        Projectile_Bomb bombScript = currentBomb.GetComponent<Projectile_Bomb>();
+        if (bombScript != null)
+        {
+            bombScript.SetCollisionEnabled(true);
+        }
+
+        // TODO (opcional): tocar som de "elástico arrebentando" e/ou vibrar o controle aqui
 
         currentBomb = null;
     }
@@ -178,8 +235,11 @@ public class SlingshotController : MonoBehaviour
         if (pullDistance < minPullDistance)
             return Vector3.zero;
 
+        float normalizedPull = pullDistance / maxPullDistance;
+        float curveValue = pullForceCurve.Evaluate(normalizedPull);
+
         Vector3 direction = pullVector.normalized;
-        return direction * pullDistance * launchForceMultiplier;
+        return direction * curveValue * launchForceMultiplier;
     }
 
     // ---------- LOOP: cor (não sensível a ordem de tracking) ----------
@@ -196,7 +256,6 @@ public class SlingshotController : MonoBehaviour
 
     void LateUpdate()
     {
-        // DEBUG: atualiza posição do estilingue em tempo real pra facilitar ajuste do offset
         if (currentSlingshot != null)
         {
             Vector3 spawnPos = leftHandTransform.position + leftHandTransform.TransformDirection(slingshotOffset);
@@ -228,8 +287,6 @@ public class SlingshotController : MonoBehaviour
             Vector3 nextPos = pos + vel * timeStep;
             vel += Physics.gravity * timeStep;
 
-            // ignora colliders marcados como "Is Trigger" (estilingue, hand zones etc.)
-            // e s� passa a checar colis�o a partir do 3� ponto, evitando self-hit bem na origem
             bool checkCollision = i > 2;
 
             if (checkCollision && Physics.Linecast(pos, nextPos, out RaycastHit hit, trajectoryCollisionMask, QueryTriggerInteraction.Ignore))
@@ -245,6 +302,7 @@ public class SlingshotController : MonoBehaviour
         trajectoryLine.positionCount = points.Count;
         trajectoryLine.SetPositions(points.ToArray());
     }
+
     void OnDrawGizmos()
     {
         if (bombSpawnPoint != null)

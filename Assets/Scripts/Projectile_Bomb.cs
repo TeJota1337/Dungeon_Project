@@ -38,8 +38,6 @@ public class Projectile_Bomb : MonoBehaviour
             bombCollider.enabled = enabled;
     }
 
-    // ignora colisão física com colliders específicos (ex: o corpo do jogador)
-    // pelo resto da vida desse objeto
     public void IgnoreCollisionsWith(Collider[] collidersToIgnore)
     {
         if (bombCollider == null || collidersToIgnore == null) return;

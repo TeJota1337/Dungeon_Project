@@ -15,7 +15,12 @@ public class Projectile_Bomb : MonoBehaviour
     public float giantDamageMultiplier = 2.5f;
     public float giantExplosionRadius = 2f;
 
+    [Header("VFX de Explosão")]
+    public GameObject explosionPrefab;
+    public float explosionScaleMultiplier = 1f; // multiplicado extra se for gigante
+
     private Collider bombCollider;
+    private bool hasExploded; // trava contra explodir duas vezes
 
     void Awake()
     {
@@ -24,7 +29,8 @@ public class Projectile_Bomb : MonoBehaviour
 
     void Start()
     {
-        Destroy(gameObject, destroyAfterSeconds);
+        // timeout: se não colidiu com nada até aqui, "expira" e explode sozinha
+        Invoke(nameof(ExplodeFromTimeout), destroyAfterSeconds);
 
         if (isGiant)
         {
@@ -51,6 +57,8 @@ public class Projectile_Bomb : MonoBehaviour
 
     void OnCollisionEnter(Collision collision)
     {
+        if (hasExploded) return;
+
         EnemyAI directHitEnemy = collision.gameObject.GetComponentInParent<EnemyAI>();
 
         if (isGiant && giantExplosionRadius > 0f)
@@ -62,7 +70,28 @@ public class Projectile_Bomb : MonoBehaviour
             ApplyDamage(directHitEnemy, collision.collider);
         }
 
+        SpawnExplosionVFX();
+        hasExploded = true;
         Destroy(gameObject);
+    }
+
+    void ExplodeFromTimeout()
+    {
+        if (hasExploded) return; // já explodiu por colisão antes do timeout disparar
+
+        SpawnExplosionVFX();
+        hasExploded = true;
+        Destroy(gameObject);
+    }
+
+    void SpawnExplosionVFX()
+    {
+        if (explosionPrefab == null) return;
+
+        GameObject vfx = Instantiate(explosionPrefab, transform.position, Quaternion.identity);
+
+        float scale = explosionScaleMultiplier * (isGiant ? giantScaleMultiplier : 1f);
+        vfx.transform.localScale = Vector3.one * scale;
     }
 
     void ApplyDamage(EnemyAI enemy, Collider hitCollider)

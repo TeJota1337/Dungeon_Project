@@ -67,7 +67,17 @@ public class EnemyAI : MonoBehaviour
     void Awake()
     {
         agent = GetComponent<NavMeshAgent>();
-        renderers = GetComponentsInChildren<Renderer>();
+
+        // NOVO: sorteia e instancia o modelo visual antes de capturar renderers
+        EnemyVisualRandomizer visualRandomizer = GetComponent<EnemyVisualRandomizer>();
+        if (visualRandomizer != null)
+        {
+            renderers = visualRandomizer.Initialize();
+        }
+        else
+        {
+            renderers = GetComponentsInChildren<Renderer>();
+        }
 
         originalColors = new Color[renderers.Length];
         for (int i = 0; i < renderers.Length; i++)
@@ -78,9 +88,7 @@ public class EnemyAI : MonoBehaviour
         health = Random.Range(minHealth, maxHealth + 1);
         rolledMax = health;
 
-        // MUDANÇA AQUI: de GetComponent para GetComponentInChildren
         healthDisplay = GetComponentInChildren<EnemyHealthDisplay>();
-
         if (healthDisplay != null)
             healthDisplay.Initialize(health);
     }

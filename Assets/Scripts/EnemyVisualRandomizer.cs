@@ -5,7 +5,7 @@ public class VisualVariant
 {
     public string variantName;
     public GameObject visualPrefab;
-    public Avatar avatar; // NOVO: cada variante carrega seu próprio Avatar (Generic)
+    public Avatar avatar; // NOVO: cada variante carrega seu prï¿½prio Avatar (Generic)
 }
 
 public class EnemyVisualRandomizer : MonoBehaviour
@@ -16,10 +16,10 @@ public class EnemyVisualRandomizer : MonoBehaviour
     [Header("Escala do modelo")]
     public float visualScale = 0.7f;
 
-    [Header("Variações visuais possíveis")]
+    [Header("Variaï¿½ï¿½es visuais possï¿½veis")]
     public VisualVariant[] visualVariants;
 
-    [Header("Animação")]
+    [Header("Animaï¿½ï¿½o")]
     public RuntimeAnimatorController baseWalkController;
     public AnimationClip[] walkClips;
     public string walkClipNameInController = "Walk";
@@ -40,6 +40,14 @@ public class EnemyVisualRandomizer : MonoBehaviour
 
     void SpawnRandomVisual()
     {
+        // objeto pode estar sendo reaproveitado do pool: remove o modelo do uso anterior antes de sortear outro
+        if (spawnedVisual != null)
+        {
+            Destroy(spawnedVisual);
+            spawnedVisual = null;
+            spawnedAnimator = null;
+        }
+
         if (visualVariants == null || visualVariants.Length == 0) return;
 
         chosenVariant = visualVariants[Random.Range(0, visualVariants.Length)];
@@ -62,7 +70,7 @@ public class EnemyVisualRandomizer : MonoBehaviour
             spawnedAnimator = spawnedVisual.AddComponent<Animator>();
         }
 
-        // Avatar ESPECÍFICO dessa variante (Generic não aceita Avatar compartilhado)
+        // Avatar ESPECï¿½FICO dessa variante (Generic nï¿½o aceita Avatar compartilhado)
         if (chosenVariant.avatar != null)
         {
             spawnedAnimator.avatar = chosenVariant.avatar;

@@ -54,10 +54,14 @@ public class SlingshotController : MonoBehaviour
     private GameObject currentSlingshot;
     private GameObject currentBomb;
     private Renderer slingshotRenderer;
+    private Material slingshotMaterialInstance;
     private Collider slingshotTriggerZone;
 
     private bool isRightHandInZone;
     private bool isAiming;
+    private bool? lastSlingshotColorState;
+
+    private Vector3[] trajectoryPoints;
 
     void OnEnable()
     {
@@ -98,22 +102,32 @@ public class SlingshotController : MonoBehaviour
 
         currentSlingshot = Instantiate(slingshotPrefab, leftHandTransform.position, leftHandTransform.rotation, leftHandTransform);
         slingshotRenderer = currentSlingshot.GetComponentInChildren<Renderer>();
+        slingshotMaterialInstance = slingshotRenderer != null ? slingshotRenderer.material : null;
         slingshotTriggerZone = currentSlingshot.GetComponentInChildren<Collider>();
 
         SlingshotZoneDetector detector = currentSlingshot.AddComponent<SlingshotZoneDetector>();
         detector.onHandEnter = () => isRightHandInZone = true;
         detector.onHandExit = () => isRightHandInZone = false;
 
+        lastSlingshotColorState = null;
         SetSlingshotColor(idleColor);
     }
 
     void CancelEverything()
     {
-        if (currentBomb != null) Destroy(currentBomb);
+        if (currentBomb != null)
+        {
+            PooledObject pooledBomb = currentBomb.GetComponent<PooledObject>();
+            if (pooledBomb != null) pooledBomb.ReturnToPool();
+            else Destroy(currentBomb);
+        }
         if (currentSlingshot != null) Destroy(currentSlingshot);
 
         currentBomb = null;
         currentSlingshot = null;
+        slingshotRenderer = null;
+        slingshotMaterialInstance = null;
+        lastSlingshotColorState = null;
         isAiming = false;
         isRightHandInZone = false;
         trajectoryLine.enabled = false;
@@ -121,8 +135,8 @@ public class SlingshotController : MonoBehaviour
 
     void SetSlingshotColor(Color color)
     {
-        if (slingshotRenderer != null)
-            slingshotRenderer.material.color = color;
+        if (slingshotMaterialInstance != null)
+            slingshotMaterialInstance.color = color;
     }
 
     // ---------- MÃO DIREITA (bomba) ----------
@@ -131,7 +145,7 @@ public class SlingshotController : MonoBehaviour
     {
         if (currentSlingshot == null || !isRightHandInZone) return;
 
-        currentBomb = Instantiate(bombPrefab, bombSpawnPoint.position, Quaternion.identity);
+        currentBomb = ObjectPoolManager.Instance.Get(bombPrefab, bombSpawnPoint.position, Quaternion.identity);
 
         Projectile_Bomb bombScript = currentBomb.GetComponent<Projectile_Bomb>();
         if (bombScript != null)
@@ -246,8 +260,9 @@ public class SlingshotController : MonoBehaviour
 
     void Update()
     {
-        if (currentSlingshot != null)
+        if (currentSlingshot != null && lastSlingshotColorState != isRightHandInZone)
         {
+            lastSlingshotColorState = isRightHandInZone;
             SetSlingshotColor(isRightHandInZone ? readyColor : idleColor);
         }
     }
@@ -274,13 +289,16 @@ public class SlingshotController : MonoBehaviour
 
     void DrawTrajectory(Vector3 startPos, Vector3 startVelocity)
     {
+        if (trajectoryPoints == null || trajectoryPoints.Length != trajectoryResolution)
+            trajectoryPoints = new Vector3[Mathf.Max(trajectoryResolution, 1)];
+
         float timeStep = maxSimulationTime / trajectoryResolution;
 
         Vector3 pos = startPos;
         Vector3 vel = startVelocity;
 
-        System.Collections.Generic.List<Vector3> points = new System.Collections.Generic.List<Vector3>();
-        points.Add(pos);
+        int count = 1;
+        trajectoryPoints[0] = pos;
 
         for (int i = 1; i < trajectoryResolution; i++)
         {
@@ -291,16 +309,16 @@ public class SlingshotController : MonoBehaviour
 
             if (checkCollision && Physics.Linecast(pos, nextPos, out RaycastHit hit, trajectoryCollisionMask, QueryTriggerInteraction.Ignore))
             {
-                points.Add(hit.point);
+                trajectoryPoints[count++] = hit.point;
                 break;
             }
 
-            points.Add(nextPos);
+            trajectoryPoints[count++] = nextPos;
             pos = nextPos;
         }
 
-        trajectoryLine.positionCount = points.Count;
-        trajectoryLine.SetPositions(points.ToArray());
+        trajectoryLine.positionCount = count;
+        trajectoryLine.SetPositions(trajectoryPoints);
     }
 
     void OnDrawGizmos()

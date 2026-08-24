@@ -1,20 +1,49 @@
 using UnityEngine;
 
-public class ExplosionEffect : MonoBehaviour
+public class ExplosionEffect : MonoBehaviour, IPoolable
 {
-    void Start()
+    private ParticleSystem[] allSystems;
+    private float maxDuration;
+    private PooledObject pooledObject;
+
+    void Awake()
     {
-        // calcula a duração total baseada no maior Particle System filho,
-        // pra destruir o objeto só depois que tudo terminou de tocar
-        ParticleSystem[] allSystems = GetComponentsInChildren<ParticleSystem>();
-        float maxDuration = 0f;
+        // calcula a duraï¿½ï¿½o total baseada no maior Particle System filho,
+        // pra devolver o objeto ao pool sï¿½ depois que tudo terminou de tocar
+        allSystems = GetComponentsInChildren<ParticleSystem>();
 
         foreach (var ps in allSystems)
         {
             float total = ps.main.duration + ps.main.startLifetime.constantMax;
             if (total > maxDuration) maxDuration = total;
         }
+    }
 
-        Destroy(gameObject, maxDuration + 0.2f); // margem de segurança
+    public void OnSpawnFromPool()
+    {
+        foreach (var ps in allSystems)
+        {
+            ps.Clear(false);
+            ps.Play(false);
+        }
+
+        CancelInvoke(nameof(ReturnToPool));
+        Invoke(nameof(ReturnToPool), maxDuration + 0.2f); // margem de seguranï¿½a
+    }
+
+    public void OnReturnToPool()
+    {
+        CancelInvoke(nameof(ReturnToPool));
+    }
+
+    void ReturnToPool()
+    {
+        if (pooledObject == null)
+            pooledObject = GetComponent<PooledObject>();
+
+        if (pooledObject != null)
+            pooledObject.ReturnToPool();
+        else
+            Destroy(gameObject);
     }
 }

@@ -172,12 +172,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Projectile_Bomb
   destroyAfterSeconds: 5
-  minDamage: 2
+  minDamage: 10
   maxDamage: 10
-  isGiant: 0
+  isGiantSerialized: 0
   giantScaleMultiplier: 3
   giantDamageMultiplier: 10
   giantExplosionRadius: 2
+  splashRadius: 4
+  splashDamageMultiplier: 0.8
   explosionPrefab: {fileID: 4358138522882051042, guid: 703ab53d5ba3fa44282db052edece0f1, type: 3}
   explosionScaleMultiplier: 1
 --- !u!54 &9014701671390854116

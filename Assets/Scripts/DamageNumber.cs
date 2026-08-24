@@ -1,7 +1,7 @@
 using UnityEngine;
 using TMPro;
 
-public class DamageNumber : MonoBehaviour
+public class DamageNumber : MonoBehaviour, IPoolable
 {
     [Header("Timing")]
     public float lifetime = 1f;
@@ -23,7 +23,7 @@ public class DamageNumber : MonoBehaviour
     public float minSizeFactor = 0.5f;
     public float maxSizeFactor = 2.5f;
 
-    [Header("Escala por Distância do Jogador")]
+    [Header("Escala por Distï¿½ncia do Jogador")]
     public bool scaleWithDistance = true;
     public float referenceDistance = 2f;
     public float minDistanceScale = 0.4f;
@@ -34,9 +34,9 @@ public class DamageNumber : MonoBehaviour
     public float fadeStartPercent = 0.4f;
     public AnimationCurve fadeCurve = AnimationCurve.Linear(0, 1, 1, 0);
 
-    [Header("Crítico")]
+    [Header("Crï¿½tico")]
     public float critScaleMultiplier = 1.6f;
-    public string critPrefix = "CRÍTICO!\n";
+    public string critPrefix = "CRï¿½TICO!\n";
 
     [Header("Fonte")]
     public TMP_FontAsset font;
@@ -46,18 +46,6 @@ public class DamageNumber : MonoBehaviour
     public float characterSpacing = 0f;
     public float lineSpacing = 0f;
     public float wordSpacing = 0f;
-
-    [Header("Fonte - Outline")]
-    public bool useOutline = true;
-    [Range(0f, 1f)]
-    public float outlineWidth = 0.2f;
-    public Color outlineColor = Color.black;
-
-    [Header("Fonte - Sombra/Glow (via Material)")]
-    public bool useUnderlay = false;
-    public Color underlayColor = new Color(0, 0, 0, 0.5f);
-    public Vector2 underlayOffset = new Vector2(0.1f, -0.1f);
-    public float underlaySoftness = 0.1f;
 
     private TextMeshProUGUI text;
     private Transform cam;
@@ -69,6 +57,8 @@ public class DamageNumber : MonoBehaviour
     private bool isCrit;
     private Color currentColor;
     private float timeSinceLastHit;
+    private GameObject currentOwner;
+    private PooledObject pooledObject;
 
     public bool CanStack => timeSinceLastHit <= stackWindow;
 
@@ -82,6 +72,9 @@ public class DamageNumber : MonoBehaviour
 
     void ApplyFontSettings()
     {
+        // Outline/underlay agora sï¿½o configurados uma vez no material do prefab (Editor),
+        // nï¿½o mais aqui: acessar text.fontMaterial clonava um Material novo por nï¿½mero de
+        // dano instanciado, e esse era o objeto mais spawnado do jogo.
         if (font != null)
             text.font = font;
 
@@ -91,34 +84,24 @@ public class DamageNumber : MonoBehaviour
         text.characterSpacing = characterSpacing;
         text.lineSpacing = lineSpacing;
         text.wordSpacing = wordSpacing;
-
-        Material mat = text.fontMaterial;
-
-        if (useOutline)
-        {
-            mat.EnableKeyword("OUTLINE_ON");
-            mat.SetFloat(ShaderUtilities.ID_OutlineWidth, outlineWidth);
-            mat.SetColor(ShaderUtilities.ID_OutlineColor, outlineColor);
-        }
-        else
-        {
-            mat.SetFloat(ShaderUtilities.ID_OutlineWidth, 0f);
-        }
-
-        if (useUnderlay)
-        {
-            mat.EnableKeyword("UNDERLAY_ON");
-            mat.SetColor(ShaderUtilities.ID_UnderlayColor, underlayColor);
-            mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, underlayOffset.x);
-            mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, underlayOffset.y);
-            mat.SetFloat(ShaderUtilities.ID_UnderlaySoftness, underlaySoftness);
-        }
-
-        text.fontMaterial = mat;
     }
 
-    public void Setup(int amount, bool crit, Color color)
+    public void OnSpawnFromPool()
     {
+        // Setup() ï¿½ chamado logo em seguida pelo DamageNumberManager com os dados do hit
+    }
+
+    public void OnReturnToPool()
+    {
+        if (DamageNumberManager.Instance != null)
+            DamageNumberManager.Instance.ClearOwnerIfCurrent(currentOwner, this);
+
+        currentOwner = null;
+    }
+
+    public void Setup(GameObject owner, int amount, bool crit, Color color)
+    {
+        currentOwner = owner;
         currentAmount = amount;
         isCrit = crit;
         currentColor = color;
@@ -154,7 +137,7 @@ public class DamageNumber : MonoBehaviour
         float sizeFactor = Mathf.Lerp(minSizeFactor, maxSizeFactor, t);
         targetScale = baseScale * sizeFactor;
 
-        // cor sempre vem da zona atingida, sem alternar entre "normal" e "crítico"
+        // cor sempre vem da zona atingida, sem alternar entre "normal" e "crï¿½tico"
         Color c = currentColor;
         c.a = 1f; // garante alpha cheio ao (re)aplicar, o fade cuida do resto depois
         text.color = c;
@@ -211,7 +194,18 @@ public class DamageNumber : MonoBehaviour
 
         if (timer >= lifetime)
         {
-            Destroy(gameObject);
+            ReturnToPool();
         }
+    }
+
+    void ReturnToPool()
+    {
+        if (pooledObject == null)
+            pooledObject = GetComponent<PooledObject>();
+
+        if (pooledObject != null)
+            pooledObject.ReturnToPool();
+        else
+            Destroy(gameObject);
     }
 }

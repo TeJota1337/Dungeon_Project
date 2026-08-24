@@ -21,9 +21,9 @@ public class ZoneConfig
 }
 
 [RequireComponent(typeof(NavMeshAgent))]
-public class EnemyAI : MonoBehaviour
+public class EnemyAI : MonoBehaviour, IPoolable
 {
-    [Header("Navegação")]
+    [Header("Navegaï¿½ï¿½o")]
     public Transform objective;
 
     [Header("Vida")]
@@ -31,7 +31,7 @@ public class EnemyAI : MonoBehaviour
     public int maxHealth = 15;
 
     private int health;      // vida atual, sorteada no Awake
-    private int rolledMax;   // valor máximo sorteado pra ESTE inimigo (usado no display de %)
+    private int rolledMax;   // valor mï¿½ximo sorteado pra ESTE inimigo (usado no display de %)
     private EnemyHealthDisplay healthDisplay;
 
     [Header("Feedback de dano")]
@@ -39,17 +39,37 @@ public class EnemyAI : MonoBehaviour
     public float hitFlashDuration = 0.15f;
 
     [Header("Zonas de Dano")]
-    public float bottomOffset = 0f;   // onde o bloco de zonas COMEÇA (base), em Y local
+    public float bottomOffset = 0f;   // onde o bloco de zonas COMEï¿½A (base), em Y local
     public float totalHeight = 2f;    // altura total do bloco (onde TERMINA = bottomOffset + totalHeight)
     public float zoneWidth = 0.6f;    // largura/profundidade de cada zona (eixos X e Z)
     public ZoneConfig[] zones = new ZoneConfig[4];
+
+    [Header("Variaï¿½ï¿½o de Movimento")]
+    [Tooltip("Multiplicadores sorteados sobre a velocidade base do NavMeshAgent do prefab, pra nem todo inimigo andar igual.")]
+    public float minSpeedMultiplier = 0.85f;
+    public float maxSpeedMultiplier = 1.2f;
+    [Tooltip("A cada intervalo (sorteado entre esses dois valores), o inimigo mira num ponto levemente deslocado do objetivo em vez do centro exato, criando uma caminhada menos linear.")]
+    public float minWanderInterval = 1.5f;
+    public float maxWanderInterval = 3.5f;
+    public float wanderRadius = 0.75f;
+    [Tooltip("Distï¿½ncia do objetivo a partir da qual o desvio de wander ï¿½ desligado, pra garantir uma chegada limpa (sem ficar orbitando o objetivo).")]
+    public float wanderMinDistanceFromObjective = 2f;
+
+    [Header("Evitar Sobreposiï¿½ï¿½o entre Inimigos (NavMeshAgent Avoidance)")]
+    [Tooltip("Sorteado por inimigo pra evitar que dois agentes de mesma prioridade 'empatem' tentando se desviar um do outro. Requer que o NavMeshAgent do prefab tenha um Obstacle Avoidance Type diferente de 'No Avoidance'.")]
+    public int minAvoidancePriority = 10;
+    public int maxAvoidancePriority = 90;
 
     private NavMeshAgent agent;
     private Renderer[] renderers;
     private Color[] originalColors;
     private Coroutine flashRoutine;
+    private PooledObject pooledObject;
+    private float baseAgentSpeed;
+    private float wanderTimer;
+    private float nextWanderInterval;
 
-    // ---------- SETUP PADRÃO (roda ao adicionar o componente) ----------
+    // ---------- SETUP PADRï¿½O (roda ao adicionar o componente) ----------
 
     void Reset()
     {
@@ -67,17 +87,26 @@ public class EnemyAI : MonoBehaviour
     void Awake()
     {
         agent = GetComponent<NavMeshAgent>();
+        healthDisplay = GetComponentInChildren<EnemyHealthDisplay>();
+        baseAgentSpeed = agent.speed;
+    }
 
-        // NOVO: sorteia e instancia o modelo visual antes de capturar renderers
+    // ---------- POOLING: reinicializa tudo que era feito em Awake/Start,
+    // jÃ¡ que esses sÃ³ rodam uma vez na vida do GameObject e nÃ£o disparam de novo a cada reuso ----------
+
+    public void OnSpawnFromPool()
+    {
+        if (flashRoutine != null)
+        {
+            StopCoroutine(flashRoutine);
+            flashRoutine = null;
+        }
+
+        // sorteia e instancia o modelo visual antes de capturar renderers
         EnemyVisualRandomizer visualRandomizer = GetComponent<EnemyVisualRandomizer>();
-        if (visualRandomizer != null)
-        {
-            renderers = visualRandomizer.Initialize();
-        }
-        else
-        {
-            renderers = GetComponentsInChildren<Renderer>();
-        }
+        renderers = visualRandomizer != null
+            ? visualRandomizer.Initialize()
+            : GetComponentsInChildren<Renderer>();
 
         originalColors = new Color[renderers.Length];
         for (int i = 0; i < renderers.Length; i++)
@@ -88,13 +117,30 @@ public class EnemyAI : MonoBehaviour
         health = Random.Range(minHealth, maxHealth + 1);
         rolledMax = health;
 
-        healthDisplay = GetComponentInChildren<EnemyHealthDisplay>();
         if (healthDisplay != null)
             healthDisplay.Initialize(health);
+
+        agent.speed = baseAgentSpeed * Random.Range(minSpeedMultiplier, maxSpeedMultiplier);
+        agent.avoidancePriority = Random.Range(minAvoidancePriority, maxAvoidancePriority + 1);
+
+        wanderTimer = 0f;
+        nextWanderInterval = Random.Range(minWanderInterval, maxWanderInterval);
     }
 
-    void Start()
+    public void OnReturnToPool()
     {
+        if (flashRoutine != null)
+        {
+            StopCoroutine(flashRoutine);
+            flashRoutine = null;
+        }
+    }
+
+    // Chamado explicitamente por quem spawna o inimigo (SpawnManager), depois de tirÃ¡-lo do pool
+    public void Init(Transform newObjective)
+    {
+        objective = newObjective;
+
         if (objective != null)
             agent.SetDestination(objective.position);
     }
@@ -104,13 +150,58 @@ public class EnemyAI : MonoBehaviour
         if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
         {
             OnReachObjective();
+            return;
+        }
+
+        UpdateWander();
+    }
+
+    void UpdateWander()
+    {
+        if (objective == null) return;
+
+        wanderTimer += Time.deltaTime;
+        if (wanderTimer < nextWanderInterval) return;
+
+        wanderTimer = 0f;
+        nextWanderInterval = Random.Range(minWanderInterval, maxWanderInterval);
+
+        float distanceToObjective = Vector3.Distance(transform.position, objective.position);
+
+        if (distanceToObjective > wanderMinDistanceFromObjective)
+        {
+            Vector2 randomOffset = Random.insideUnitCircle * wanderRadius;
+            Vector3 wanderTarget = objective.position + new Vector3(randomOffset.x, 0f, randomOffset.y);
+            agent.SetDestination(wanderTarget);
+        }
+        else
+        {
+            // perto o suficiente do objetivo: mira exato, sem desvio, pra garantir chegada limpa
+            agent.SetDestination(objective.position);
         }
     }
 
     void OnReachObjective()
     {
         Debug.Log($"{name} chegou na dungeon!");
-        Destroy(gameObject);
+
+        // causa na pedra o dano igual ï¿½ vida ATUAL do inimigo (nï¿½o o mï¿½ximo sorteado):
+        // quanto mais dano o jogador jï¿½ causou nele, menos ele "rouba" ao chegar
+        if (GemObjective.Instance != null)
+            GemObjective.Instance.TakeDamage(health);
+
+        ReturnToPool();
+    }
+
+    void ReturnToPool()
+    {
+        if (pooledObject == null)
+            pooledObject = GetComponent<PooledObject>();
+
+        if (pooledObject != null)
+            pooledObject.ReturnToPool();
+        else
+            Destroy(gameObject);
     }
 
     // ---------- DANO ----------
@@ -118,7 +209,9 @@ public class EnemyAI : MonoBehaviour
     public void TakeDamage(int amount, bool isCrit = false, Color? hitColor = null)
     {
         health -= amount;
-        Debug.Log($"{name} tomou {amount} de dano{(isCrit ? " (CRÍTICO)" : "")}. Vida restante: {health}/{rolledMax}");
+#if UNITY_EDITOR
+        Debug.Log($"{name} tomou {amount} de dano{(isCrit ? " (CRï¿½TICO)" : "")}. Vida restante: {health}/{rolledMax}");
+#endif
 
         if (healthDisplay != null)
             healthDisplay.UpdateDisplay(health);
@@ -130,7 +223,7 @@ public class EnemyAI : MonoBehaviour
 
         if (health <= 0)
         {
-            Destroy(gameObject);
+            ReturnToPool();
         }
     }
 
@@ -167,7 +260,7 @@ public class EnemyAI : MonoBehaviour
         return null;
     }
 
-    // ---------- ZONAS: vínculo entre porcentagens + layout automático ----------
+    // ---------- ZONAS: vï¿½nculo entre porcentagens + layout automï¿½tico ----------
 
     void OnValidate()
     {
@@ -241,12 +334,12 @@ public class EnemyAI : MonoBehaviour
     {
         if (zones == null) return;
 
-        // o bloco vai de "bottomOffset" até "bottomOffset + totalHeight"
+        // o bloco vai de "bottomOffset" atï¿½ "bottomOffset + totalHeight"
         float top = bottomOffset + totalHeight;
         float currentTop = top;
 
-        // processa em ORDEM REVERSA: o ÚLTIMO elemento do array fica no TOPO
-        // (assim, com Critical como último elemento, ele nasce no topo automaticamente)
+        // processa em ORDEM REVERSA: o ï¿½LTIMO elemento do array fica no TOPO
+        // (assim, com Critical como ï¿½ltimo elemento, ele nasce no topo automaticamente)
         for (int i = zones.Length - 1; i >= 0; i--)
         {
             var zone = zones[i];

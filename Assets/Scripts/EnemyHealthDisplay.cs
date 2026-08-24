@@ -3,12 +3,12 @@ using TMPro;
 
 public class EnemyHealthDisplay : MonoBehaviour
 {
-    [Header("Referências")]
+    [Header("Referï¿½ncias")]
     public Transform canvasRoot;      // o objeto HealthCanvas inteiro (pra habilitar/desabilitar)
     public TextMeshProUGUI healthText;
 
     [Header("Comportamento")]
-    public bool hiddenUntilFirstHit = false; // só aparece depois do primeiro dano
+    public bool hiddenUntilFirstHit = false; // sï¿½ aparece depois do primeiro dano
     public bool billboardToCamera = true;
 
     [Header("Cores por porcentagem de vida")]
@@ -33,7 +33,13 @@ public class EnemyHealthDisplay : MonoBehaviour
     public void Initialize(int startingHealth)
     {
         maxHealth = startingHealth;
-        // Chama apenas a atualização visual, sem registrar como se fosse um dano sofrido
+        hasBeenHit = false;
+
+        // objeto pode estar sendo reaproveitado do pool: reaplica o estado "escondido atï¿½ o primeiro hit"
+        if (canvasRoot != null && hiddenUntilFirstHit)
+            canvasRoot.gameObject.SetActive(false);
+
+        // Chama apenas a atualizaï¿½ï¿½o visual, sem registrar como se fosse um dano sofrido
         UpdateVisualsOnly(startingHealth);
     }
 
@@ -48,7 +54,7 @@ public class EnemyHealthDisplay : MonoBehaviour
         UpdateVisualsOnly(currentHealth);
     }
 
-    // Novo método que isola apenas a lógica de texto e mudança de cores
+    // Novo mï¿½todo que isola apenas a lï¿½gica de texto e mudanï¿½a de cores
     private void UpdateVisualsOnly(int currentHealth)
     {
         if (healthText == null) return;

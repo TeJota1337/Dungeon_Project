@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class Projectile_Bomb : MonoBehaviour
+public class Projectile_Bomb : MonoBehaviour, IPoolable
 {
     [Header("Timing")]
     public float destroyAfterSeconds = 5f;
@@ -10,32 +10,74 @@ public class Projectile_Bomb : MonoBehaviour
     public int maxDamage = 15;
 
     [Header("Bomba Gigante")]
-    public bool isGiant = false;
+    [SerializeField] private bool isGiantSerialized = false;
     public float giantScaleMultiplier = 3f;
     public float giantDamageMultiplier = 2.5f;
     public float giantExplosionRadius = 2f;
 
-    [Header("VFX de Explosão")]
+    [Header("Dano em Ãrea (quase-acerto)")]
+    [Tooltip("Se a bomba (nÃ£o-gigante) colidir sem acertar um inimigo diretamente, inimigos dentro desse raio da explosÃ£o tomam dano reduzido.")]
+    public float splashRadius = 1.5f;
+    [Range(0f, 1f)]
+    public float splashDamageMultiplier = 0.5f;
+
+    [Header("VFX de Explosï¿½o")]
     public GameObject explosionPrefab;
     public float explosionScaleMultiplier = 1f; // multiplicado extra se for gigante
 
     private Collider bombCollider;
+    private Rigidbody bombRigidbody;
+    private PooledObject pooledObject;
+    private Vector3 baseScale;
     private bool hasExploded; // trava contra explodir duas vezes
+
+    // setar isGiant jÃ¡ aplica a escala correspondente na hora, entÃ£o funciona
+    // independente da ordem entre "vir do pool" e "SlingshotController decidir se Ã© gigante"
+    public bool isGiant
+    {
+        get => isGiantSerialized;
+        set
+        {
+            isGiantSerialized = value;
+            transform.localScale = value ? baseScale * giantScaleMultiplier : baseScale;
+        }
+    }
 
     void Awake()
     {
         bombCollider = GetComponent<Collider>();
+        bombRigidbody = GetComponent<Rigidbody>();
+        baseScale = transform.localScale;
     }
 
-    void Start()
-    {
-        // timeout: se não colidiu com nada até aqui, "expira" e explode sozinha
-        Invoke(nameof(ExplodeFromTimeout), destroyAfterSeconds);
+    // ---------- POOLING: reinicializa tudo que era feito em Start,
+    // jï¿½ que sï¿½ roda uma vez na vida do GameObject e nï¿½o dispara de novo a cada reuso ----------
 
-        if (isGiant)
+    public void OnSpawnFromPool()
+    {
+        hasExploded = false;
+
+        // desfaz qualquer estado deixado pelo uso anterior (ex: escala de bomba gigante);
+        // o setter de isGiant jÃ¡ restaura a escala base
+        isGiant = false;
+
+        if (bombCollider != null)
+            bombCollider.enabled = true;
+
+        if (bombRigidbody != null)
         {
-            transform.localScale *= giantScaleMultiplier;
+            bombRigidbody.linearVelocity = Vector3.zero;
+            bombRigidbody.angularVelocity = Vector3.zero;
         }
+
+        // cancela um timeout pendente de um uso anterior antes de agendar o novo
+        CancelInvoke(nameof(ExplodeFromTimeout));
+        Invoke(nameof(ExplodeFromTimeout), destroyAfterSeconds);
+    }
+
+    public void OnReturnToPool()
+    {
+        CancelInvoke(nameof(ExplodeFromTimeout));
     }
 
     public void SetCollisionEnabled(bool enabled)
@@ -63,38 +105,54 @@ public class Projectile_Bomb : MonoBehaviour
 
         if (isGiant && giantExplosionRadius > 0f)
         {
-            Explode();
+            DamageEnemiesInRadius(giantExplosionRadius, 1f);
         }
         else if (directHitEnemy != null)
         {
-            ApplyDamage(directHitEnemy, collision.collider);
+            ApplyDamage(directHitEnemy, collision.collider, 1f);
+        }
+        else if (splashRadius > 0f)
+        {
+            // nï¿½o acertou um inimigo diretamente: quem estiver perto o suficiente do ponto de impacto toma dano reduzido
+            DamageEnemiesInRadius(splashRadius, splashDamageMultiplier);
         }
 
         SpawnExplosionVFX();
         hasExploded = true;
-        Destroy(gameObject);
+        ReturnToPool();
     }
 
     void ExplodeFromTimeout()
     {
-        if (hasExploded) return; // já explodiu por colisão antes do timeout disparar
+        if (hasExploded) return; // jï¿½ explodiu por colisï¿½o antes do timeout disparar
 
         SpawnExplosionVFX();
         hasExploded = true;
-        Destroy(gameObject);
+        ReturnToPool();
+    }
+
+    void ReturnToPool()
+    {
+        if (pooledObject == null)
+            pooledObject = GetComponent<PooledObject>();
+
+        if (pooledObject != null)
+            pooledObject.ReturnToPool();
+        else
+            Destroy(gameObject);
     }
 
     void SpawnExplosionVFX()
     {
         if (explosionPrefab == null) return;
 
-        GameObject vfx = Instantiate(explosionPrefab, transform.position, Quaternion.identity);
+        GameObject vfx = ObjectPoolManager.Instance.Get(explosionPrefab, transform.position, Quaternion.identity);
 
         float scale = explosionScaleMultiplier * (isGiant ? giantScaleMultiplier : 1f);
         vfx.transform.localScale = Vector3.one * scale;
     }
 
-    void ApplyDamage(EnemyAI enemy, Collider hitCollider)
+    void ApplyDamage(EnemyAI enemy, Collider hitCollider, float extraMultiplier)
     {
         ZoneConfig zone = enemy.GetZoneByCollider(hitCollider);
 
@@ -110,14 +168,14 @@ public class Projectile_Bomb : MonoBehaviour
         int baseDamage = Random.Range(minDamage, maxDamage + 1);
         if (isGiant) baseDamage = Mathf.RoundToInt(baseDamage * giantDamageMultiplier);
 
-        int finalDamage = Mathf.RoundToInt(baseDamage * multiplier);
+        int finalDamage = Mathf.RoundToInt(baseDamage * multiplier * extraMultiplier);
 
         enemy.TakeDamage(finalDamage, isCrit, hitColor);
     }
 
-    void Explode()
+    void DamageEnemiesInRadius(float radius, float extraMultiplier)
     {
-        Collider[] hits = Physics.OverlapSphere(transform.position, giantExplosionRadius);
+        Collider[] hits = Physics.OverlapSphere(transform.position, radius);
         var hitEnemies = new System.Collections.Generic.HashSet<EnemyAI>();
 
         foreach (var hit in hits)
@@ -126,7 +184,7 @@ public class Projectile_Bomb : MonoBehaviour
             if (enemy != null && !hitEnemies.Contains(enemy))
             {
                 hitEnemies.Add(enemy);
-                ApplyDamage(enemy, hit);
+                ApplyDamage(enemy, hit, extraMultiplier);
             }
         }
     }
@@ -137,6 +195,11 @@ public class Projectile_Bomb : MonoBehaviour
         {
             Gizmos.color = new Color(1f, 0.5f, 0f, 0.3f);
             Gizmos.DrawSphere(transform.position, giantExplosionRadius);
+        }
+        else if (splashRadius > 0f)
+        {
+            Gizmos.color = new Color(1f, 0.8f, 0.2f, 0.25f);
+            Gizmos.DrawSphere(transform.position, splashRadius);
         }
     }
 }

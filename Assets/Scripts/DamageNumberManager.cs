@@ -38,10 +38,21 @@ public class DamageNumberManager : MonoBehaviour
         );
 
         Vector3 spawnPos = worldPosition + Vector3.up * spawnHeightOffset + randomOffset;
-        GameObject obj = Instantiate(damageNumberPrefab, spawnPos, Quaternion.identity);
+        GameObject obj = ObjectPoolManager.Instance.Get(damageNumberPrefab, spawnPos, Quaternion.identity);
         DamageNumber dn = obj.GetComponent<DamageNumber>();
-        dn.Setup(amount, isCrit, color);
+        dn.Setup(owner, amount, isCrit, color);
 
         activeNumbers[owner] = dn;
+    }
+
+    // Chamado pelo pr�prio DamageNumber ao voltar pro pool: como o objeto n�o �
+    // destru�do de verdade (s� desativado e reaproveitado), a checagem "existing == null"
+    // do Spawn() n�o basta pra detectar que a refer�ncia antiga expirou.
+    public void ClearOwnerIfCurrent(GameObject owner, DamageNumber number)
+    {
+        if (owner == null) return;
+
+        if (activeNumbers.TryGetValue(owner, out DamageNumber current) && current == number)
+            activeNumbers.Remove(owner);
     }
 }

@@ -1,20 +1,38 @@
 using System.Collections;
 using UnityEngine;
 
-public class ExplosionLightFlash : MonoBehaviour
+public class ExplosionLightFlash : MonoBehaviour, IPoolable
 {
     public float flashIntensity = 8f;
     public float flashDuration = 0.3f;
     public Color flashColor = new Color(1f, 0.6f, 0.2f);
 
     private Light explosionLight;
+    private Coroutine fadeRoutine;
 
     void Awake()
     {
         explosionLight = GetComponent<Light>();
+    }
+
+    public void OnSpawnFromPool()
+    {
         explosionLight.color = flashColor;
         explosionLight.intensity = flashIntensity;
-        StartCoroutine(FadeOut());
+
+        if (fadeRoutine != null)
+            StopCoroutine(fadeRoutine);
+
+        fadeRoutine = StartCoroutine(FadeOut());
+    }
+
+    public void OnReturnToPool()
+    {
+        if (fadeRoutine != null)
+        {
+            StopCoroutine(fadeRoutine);
+            fadeRoutine = null;
+        }
     }
 
     IEnumerator FadeOut()

@@ -107,7 +107,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: '::'
   objective: {fileID: 0}
   minHealth: 10
-  maxHealth: 20
+  maxHealth: 15
   hitFlashColor: {r: 1, g: 0, b: 0, a: 1}
   hitFlashDuration: 0.15
   bottomOffset: -1
@@ -117,7 +117,7 @@ MonoBehaviour:
   - type: 0
     zoneCollider: {fileID: 8727450607765985759}
     heightPercent: 0.28299996
-    damageMultiplier: 0.8
+    damageMultiplier: 0.9
     gizmoColor: {r: 0, g: 0.9158051, b: 1, a: 1}
     previousPercent: 0.28299996
   - type: 1
@@ -129,13 +129,13 @@ MonoBehaviour:
   - type: 2
     zoneCollider: {fileID: 2521839434569496039}
     heightPercent: 0.3019422
-    damageMultiplier: 1.2
+    damageMultiplier: 1.1
     gizmoColor: {r: 0.9339623, g: 0.4081835, b: 0.118948035, a: 1}
     previousPercent: 0.3019422
   - type: 3
     zoneCollider: {fileID: 2920722492718033746}
     heightPercent: 0.15302068
-    damageMultiplier: 2
+    damageMultiplier: 1.5
     gizmoColor: {r: 1, g: 0, b: 0, a: 1}
     previousPercent: 0.15302068
 --- !u!195 &7834773180973335897
@@ -173,6 +173,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyVisualRandomizer
   visualParent: {fileID: 3406166065635504815}
+  visualScale: 0.7
   visualVariants:
   - variantName: Mage
     visualPrefab: {fileID: 919132149155446097, guid: 8ef43bde5a541ee4cb8ea1942be13526, type: 3}

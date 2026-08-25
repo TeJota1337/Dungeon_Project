@@ -63,6 +63,11 @@ public class SlingshotController : MonoBehaviour
 
     private Vector3[] trajectoryPoints;
 
+    [Header("Háptico (puxada)")]
+    [Tooltip("Intervalo entre pulsos hápticos enquanto mira, pra simular tensão contínua sem spamar o motor do controle.")]
+    public float hapticPullInterval = 0.08f;
+    private float hapticPullTimer;
+
     void OnEnable()
     {
         leftTriggerAction.action.Enable();
@@ -206,6 +211,9 @@ public class SlingshotController : MonoBehaviour
         rb.isKinematic = false;
         rb.linearVelocity = launchVelocity;
 
+        PlayerHaptics.Instance?.Launch();
+        GameAudio.Instance?.PlaySlingshotLaunch(bombSpawnPoint.position);
+
         // ROTAÇÃO baseada na força: quanto mais forte, mais spin
         float speedFactor = Mathf.InverseLerp(0, launchForceMultiplier, launchVelocity.magnitude);
         float spinAmount = Mathf.Lerp(minSpin, maxSpin, speedFactor);
@@ -234,12 +242,20 @@ public class SlingshotController : MonoBehaviour
             bombScript.SetCollisionEnabled(true);
         }
 
-        // TODO (opcional): tocar som de "elástico arrebentando" e/ou vibrar o controle aqui
+        PlayerHaptics.Instance?.Break();
+        GameAudio.Instance?.PlaySlingshotBreak(currentSlingshot != null ? currentSlingshot.transform.position : transform.position);
 
         currentBomb = null;
     }
 
     // ---------- CÁLCULO DE FORÇA/DIREÇÃO ----------
+
+    float GetNormalizedPull()
+    {
+        Vector3 pullVector = leftHandTransform.position - rightHandTransform.position;
+        float pullDistance = Mathf.Clamp(pullVector.magnitude, 0, maxPullDistance);
+        return pullDistance / maxPullDistance;
+    }
 
     Vector3 GetLaunchVelocity()
     {
@@ -284,6 +300,13 @@ public class SlingshotController : MonoBehaviour
 
             Vector3 launchVelocity = GetLaunchVelocity();
             DrawTrajectory(bombSpawnPoint.position, launchVelocity);
+
+            hapticPullTimer += Time.deltaTime;
+            if (hapticPullTimer >= hapticPullInterval)
+            {
+                hapticPullTimer = 0f;
+                PlayerHaptics.Instance?.PullTick(GetNormalizedPull());
+            }
         }
     }
 

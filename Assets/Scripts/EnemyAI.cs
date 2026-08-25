@@ -94,8 +94,14 @@ public class EnemyAI : MonoBehaviour, IPoolable
     // ---------- POOLING: reinicializa tudo que era feito em Awake/Start,
     // já que esses só rodam uma vez na vida do GameObject e não disparam de novo a cada reuso ----------
 
+    // Quantos inimigos est�o ativos agora (spawnados e ainda n�o devolvidos ao pool).
+    // Usado pra decidir vit�ria: s� conta depois que o SpawnManager parar de spawnar.
+    public static int ActiveCount { get; set; }
+
     public void OnSpawnFromPool()
     {
+        ActiveCount++;
+
         if (flashRoutine != null)
         {
             StopCoroutine(flashRoutine);
@@ -129,11 +135,15 @@ public class EnemyAI : MonoBehaviour, IPoolable
 
     public void OnReturnToPool()
     {
+        ActiveCount--;
+
         if (flashRoutine != null)
         {
             StopCoroutine(flashRoutine);
             flashRoutine = null;
         }
+
+        GameStateManager.Instance?.CheckVictoryCondition();
     }
 
     // Chamado explicitamente por quem spawna o inimigo (SpawnManager), depois de tirá-lo do pool
@@ -190,6 +200,8 @@ public class EnemyAI : MonoBehaviour, IPoolable
         if (GemObjective.Instance != null)
             GemObjective.Instance.TakeDamage(health);
 
+        GameAudio.Instance?.PlayEnemyReachedObjective(transform.position);
+
         ReturnToPool();
     }
 
@@ -223,7 +235,12 @@ public class EnemyAI : MonoBehaviour, IPoolable
 
         if (health <= 0)
         {
+            GameAudio.Instance?.PlayEnemyDeath(transform.position);
             ReturnToPool();
+        }
+        else
+        {
+            GameAudio.Instance?.PlayEnemyHit(transform.position);
         }
     }
 

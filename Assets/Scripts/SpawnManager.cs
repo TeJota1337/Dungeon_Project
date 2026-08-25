@@ -3,6 +3,8 @@ using UnityEngine;
 
 public class SpawnManager : MonoBehaviour
 {
+    public static SpawnManager Instance { get; private set; }
+
     public GameObject enemyPrefab;
     public Transform[] spawnPoints;
     public Transform objective;
@@ -11,26 +13,49 @@ public class SpawnManager : MonoBehaviour
     public float spawnIntervalVariation = 0.5f;
     public float gameDuration = 120f;
 
-    private float timer;
+    private float startTime;
+
+    // ---------- TIMER: funções pra UI (world space canvas fica por sua conta) ----------
+
+    public float TimeElapsed => Time.time - startTime;
+    public float TimeRemaining => Mathf.Max(0f, gameDuration - TimeElapsed);
+    public bool HasFinishedSpawning => TimeElapsed >= gameDuration;
+
+    public string GetFormattedTimeRemaining()
+    {
+        float remaining = TimeRemaining;
+        int minutes = Mathf.FloorToInt(remaining / 60f);
+        int seconds = Mathf.FloorToInt(remaining % 60f);
+        return $"{minutes:00}:{seconds:00}";
+    }
+
+    void Awake()
+    {
+        Instance = this;
+    }
 
     void Start()
     {
+        startTime = Time.time;
+        EnemyAI.ActiveCount = 0; // garante estado limpo se a cena recarregou (restart)
+
         StartCoroutine(SpawnRoutine());
     }
 
     IEnumerator SpawnRoutine()
     {
-        while (timer < gameDuration)
+        while (TimeElapsed < gameDuration)
         {
             SpawnEnemy();
 
             float interval = Mathf.Max(0.1f, spawnInterval + Random.Range(-spawnIntervalVariation, spawnIntervalVariation));
             yield return new WaitForSeconds(interval);
-            timer += interval;
         }
 
+        // n�o dispara vit�ria direto: spawns acabaram, mas os inimigos que ainda
+        // est�o na cena precisam ser derrotados primeiro
         if (GameStateManager.Instance != null)
-            GameStateManager.Instance.TriggerVictory();
+            GameStateManager.Instance.CheckVictoryCondition();
     }
 
     // Chamado pelo GameStateManager ao terminar o jogo. Setar enabled=false NÃO para uma

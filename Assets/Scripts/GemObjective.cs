@@ -18,6 +18,9 @@ public class GemObjective : MonoBehaviour
     public Color hitFlashColor = Color.red;
     public float hitFlashDuration = 0.15f;
 
+    [Header("Barra de vida (Feel)")]
+    public GemHealthBar healthBar;
+
     private int currentHealth;
     private Renderer[] renderers;
     private Color[] originalColors;
@@ -32,6 +35,8 @@ public class GemObjective : MonoBehaviour
         originalColors = new Color[renderers.Length];
         for (int i = 0; i < renderers.Length; i++)
             originalColors[i] = renderers[i].material.color;
+
+        healthBar?.UpdateHealth(currentHealth, maxHealth);
     }
 
     public void TakeDamage(int amount)
@@ -39,9 +44,12 @@ public class GemObjective : MonoBehaviour
         if (currentHealth <= 0) return; // já destruída, ignora dano tardio
 
         currentHealth = Mathf.Max(0, currentHealth - amount);
+        healthBar?.UpdateHealth(currentHealth, maxHealth);
 
         if (DamageNumberManager.Instance != null)
             DamageNumberManager.Instance.Spawn(gameObject, transform.position, amount, false, Color.white);
+
+        GameAudio.Instance?.PlayGemDamage(transform.position);
 
         FlashRed();
 

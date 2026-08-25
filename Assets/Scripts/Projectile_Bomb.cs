@@ -102,22 +102,29 @@ public class Projectile_Bomb : MonoBehaviour, IPoolable
         if (hasExploded) return;
 
         EnemyAI directHitEnemy = collision.gameObject.GetComponentInParent<EnemyAI>();
+        bool dealtDamage = false;
 
         if (isGiant && giantExplosionRadius > 0f)
         {
-            DamageEnemiesInRadius(giantExplosionRadius, 1f);
+            dealtDamage = DamageEnemiesInRadius(giantExplosionRadius, 1f);
         }
         else if (directHitEnemy != null)
         {
             ApplyDamage(directHitEnemy, collision.collider, 1f);
+            dealtDamage = true;
         }
         else if (splashRadius > 0f)
         {
             // n�o acertou um inimigo diretamente: quem estiver perto o suficiente do ponto de impacto toma dano reduzido
-            DamageEnemiesInRadius(splashRadius, splashDamageMultiplier);
+            dealtDamage = DamageEnemiesInRadius(splashRadius, splashDamageMultiplier);
         }
 
+        // um pulso s� por bomba (n�o um por inimigo atingido), pra n�o spamar o motor h�ptico em AoE
+        if (dealtDamage)
+            PlayerHaptics.Instance?.HitConfirm();
+
         SpawnExplosionVFX();
+        GameAudio.Instance?.PlayBombExplosion(transform.position, isGiant);
         hasExploded = true;
         ReturnToPool();
     }
@@ -127,6 +134,7 @@ public class Projectile_Bomb : MonoBehaviour, IPoolable
         if (hasExploded) return; // j� explodiu por colis�o antes do timeout disparar
 
         SpawnExplosionVFX();
+        GameAudio.Instance?.PlayBombExplosion(transform.position, isGiant);
         hasExploded = true;
         ReturnToPool();
     }
@@ -173,7 +181,7 @@ public class Projectile_Bomb : MonoBehaviour, IPoolable
         enemy.TakeDamage(finalDamage, isCrit, hitColor);
     }
 
-    void DamageEnemiesInRadius(float radius, float extraMultiplier)
+    bool DamageEnemiesInRadius(float radius, float extraMultiplier)
     {
         Collider[] hits = Physics.OverlapSphere(transform.position, radius);
         var hitEnemies = new System.Collections.Generic.HashSet<EnemyAI>();
@@ -187,6 +195,8 @@ public class Projectile_Bomb : MonoBehaviour, IPoolable
                 ApplyDamage(enemy, hit, extraMultiplier);
             }
         }
+
+        return hitEnemies.Count > 0;
     }
 
     void OnDrawGizmosSelected()

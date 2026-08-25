@@ -50,12 +50,35 @@ public class SlingshotController : MonoBehaviour
     public Color readyColor = Color.green;
     public Color idleColor = Color.white;
 
+    [Header("Elástico (corda entre os joints, sempre visível)")]
+    public float elasticWidth = 0.01f;
+    public Color elasticColor = Color.black;
+    public Material elasticMaterial;
+    [Range(2, 20)] public int elasticSegmentCount = 8;
+    [Tooltip("Folga da corda em repouso. 1 = sempre esticada; acima disso ela sobra e balança.")]
+    public float elasticSlack = 1.2f;
+    public float elasticGravityScale = 1f;
+
+    [Header("Treco (física de pêndulo)")]
+    [Tooltip("Quanto o treco 'cai' por gravidade quando ninguém está segurando.")]
+    public float pouchGravityScale = 1f;
+    [Range(0f, 1f)] public float pouchDamping = 0.95f;
+
     // --- estado interno ---
     private GameObject currentSlingshot;
     private GameObject currentBomb;
     private Renderer slingshotRenderer;
     private Material slingshotMaterialInstance;
     private Collider slingshotTriggerZone;
+
+    private Transform slingshotTrecoTransform;
+    private SlingshotPouch slingshotPouch;
+    private Transform jointEsquerdoBase;
+    private Transform jointDireitoBase;
+    private Transform jointEsquerdoTreco;
+    private Transform jointDireitoTreco;
+    private VerletRope elasticoEsquerdo;
+    private VerletRope elasticoDireito;
 
     private bool isRightHandInZone;
     private bool isAiming;
@@ -114,8 +137,67 @@ public class SlingshotController : MonoBehaviour
         detector.onHandEnter = () => isRightHandInZone = true;
         detector.onHandExit = () => isRightHandInZone = false;
 
+        SetupTrecoAndElastics(currentSlingshot.transform);
+
         lastSlingshotColorState = null;
         SetSlingshotColor(idleColor);
+    }
+
+    void SetupTrecoAndElastics(Transform root)
+    {
+        slingshotTrecoTransform = FindDeepChild(root, "Slingshot_Treco");
+        jointEsquerdoBase = FindDeepChild(root, "JointEsquerdoBase");
+        jointDireitoBase = FindDeepChild(root, "JointDireitoBase");
+        jointEsquerdoTreco = FindDeepChild(root, "JointEsquerdoTreco");
+        jointDireitoTreco = FindDeepChild(root, "JointDireitoTreco");
+
+        if (slingshotTrecoTransform != null && jointEsquerdoBase != null && jointDireitoBase != null)
+        {
+            slingshotPouch = slingshotTrecoTransform.gameObject.AddComponent<SlingshotPouch>();
+            slingshotPouch.gravityScale = pouchGravityScale;
+            slingshotPouch.damping = pouchDamping;
+            slingshotPouch.Initialize(jointEsquerdoBase, jointDireitoBase, slingshotTrecoTransform.position);
+        }
+
+        if (jointEsquerdoBase != null && jointEsquerdoTreco != null)
+            elasticoEsquerdo = CreateElasticRope(root, "ElasticoEsquerdo", jointEsquerdoBase, jointEsquerdoTreco);
+
+        if (jointDireitoBase != null && jointDireitoTreco != null)
+            elasticoDireito = CreateElasticRope(root, "ElasticoDireito", jointDireitoBase, jointDireitoTreco);
+    }
+
+    VerletRope CreateElasticRope(Transform parent, string objName, Transform start, Transform end)
+    {
+        GameObject go = new GameObject(objName);
+        go.transform.SetParent(parent, false);
+
+        LineRenderer lr = go.AddComponent<LineRenderer>();
+        lr.widthMultiplier = elasticWidth;
+        lr.numCapVertices = 4;
+        lr.startColor = elasticColor;
+        lr.endColor = elasticColor;
+        if (elasticMaterial != null)
+            lr.material = elasticMaterial;
+
+        VerletRope rope = go.AddComponent<VerletRope>();
+        rope.segmentCount = elasticSegmentCount;
+        rope.slack = elasticSlack;
+        rope.gravityScale = elasticGravityScale;
+        rope.Initialize(start, end);
+
+        return rope;
+    }
+
+    static Transform FindDeepChild(Transform parent, string name)
+    {
+        foreach (Transform child in parent)
+        {
+            if (child.name == name) return child;
+
+            Transform result = FindDeepChild(child, name);
+            if (result != null) return result;
+        }
+        return null;
     }
 
     void CancelEverything()
@@ -136,6 +218,15 @@ public class SlingshotController : MonoBehaviour
         isAiming = false;
         isRightHandInZone = false;
         trajectoryLine.enabled = false;
+
+        slingshotTrecoTransform = null;
+        slingshotPouch = null;
+        jointEsquerdoBase = null;
+        jointDireitoBase = null;
+        jointEsquerdoTreco = null;
+        jointDireitoTreco = null;
+        elasticoEsquerdo = null;
+        elasticoDireito = null;
     }
 
     void SetSlingshotColor(Color color)
@@ -292,6 +383,8 @@ public class SlingshotController : MonoBehaviour
             Vector3 spawnPos = leftHandTransform.position + leftHandTransform.TransformDirection(slingshotOffset);
             currentSlingshot.transform.position = spawnPos;
             currentSlingshot.transform.rotation = leftHandTransform.rotation;
+
+            UpdateTreco();
         }
 
         if (isAiming && currentBomb != null)
@@ -308,6 +401,16 @@ public class SlingshotController : MonoBehaviour
                 PlayerHaptics.Instance?.PullTick(GetNormalizedPull());
             }
         }
+    }
+
+    void UpdateTreco()
+    {
+        if (slingshotPouch == null) return;
+
+        if (isAiming)
+            slingshotPouch.Pin(rightHandTransform.position); // treco vem junto com a mão que está puxando a bomba
+        else
+            slingshotPouch.Release(); // cai livre até as amarras esticarem, igual um estilingue de verdade
     }
 
     void DrawTrajectory(Vector3 startPos, Vector3 startVelocity)

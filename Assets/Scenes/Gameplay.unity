@@ -78058,6 +78058,14 @@ MonoBehaviour:
   maxBreakChance: 0.6
   readyColor: {r: 0, g: 1, b: 0, a: 1}
   idleColor: {r: 1, g: 0, b: 0, a: 1}
+  elasticWidth: 0.01
+  elasticColor: {r: 0, g: 0, b: 0, a: 1}
+  elasticMaterial: {fileID: 2100000, guid: 20cfcd03e5c05354f88984a7efe6723e, type: 2}
+  elasticSegmentCount: 8
+  elasticSlack: 1.2
+  elasticGravityScale: 1
+  pouchGravityScale: 1
+  pouchDamping: 0.95
   hapticPullInterval: 0.08
 --- !u!4 &1968842619
 Transform:

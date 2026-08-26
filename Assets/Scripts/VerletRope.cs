@@ -26,19 +26,30 @@ public class VerletRope : MonoBehaviour
     private Vector3[] prevPoints;
     private float segmentLength;
     private LineRenderer lineRenderer;
+    private MaterialPropertyBlock propertyBlock;
     private bool initialized;
 
     void Awake()
     {
         lineRenderer = GetComponent<LineRenderer>();
+        propertyBlock = new MaterialPropertyBlock();
     }
 
     public void Initialize(Transform start, Transform end)
     {
+        // Não confia no Awake() já ter rodado: se este componente for adicionado via AddComponent
+        // durante o Start() de outro objeto (caso do estilingue sempre visível), o Unity pode adiar
+        // o Awake deste componente pro fim da leva de inicialização em vez de rodar na hora.
+        if (lineRenderer == null) lineRenderer = GetComponent<LineRenderer>();
+        if (propertyBlock == null) propertyBlock = new MaterialPropertyBlock();
+
         anchorStart = start;
         anchorEnd = end;
 
         float restDistance = Vector3.Distance(anchorStart.position, anchorEnd.position);
+        if (restDistance < 0.001f)
+            Debug.LogWarning($"VerletRope ({name}): distância inicial entre as âncoras é quase zero ({restDistance:F4}m) — a corda vai renderizar degenerada/invisível. Confira a posição de '{anchorStart.name}' e '{anchorEnd.name}' no prefab.");
+
         segmentLength = Mathf.Max(restDistance * slack, 0.001f) / segmentCount;
 
         points = new Vector3[segmentCount + 1];
@@ -112,5 +123,19 @@ public class VerletRope : MonoBehaviour
     void PushToLineRenderer()
     {
         lineRenderer.SetPositions(points);
+    }
+
+    public void SetColor(Color color)
+    {
+        // startColor/endColor só têm efeito em shaders que leem cor de vértice (ex.: Particles/Unlit).
+        // O material do elástico é URP/Lit, que ignora isso — por isso a cor também vai via
+        // MaterialPropertyBlock em _BaseColor (URP) e _Color (Built-in), sem instanciar o material.
+        lineRenderer.startColor = color;
+        lineRenderer.endColor = color;
+
+        lineRenderer.GetPropertyBlock(propertyBlock);
+        propertyBlock.SetColor("_BaseColor", color);
+        propertyBlock.SetColor("_Color", color);
+        lineRenderer.SetPropertyBlock(propertyBlock);
     }
 }

@@ -28493,9 +28493,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: '::'
   enemyPrefab: {fileID: 2535166374828457072, guid: d9a7cd5164a5eed459530ce51819c72d, type: 3}
   spawnPoints:
-  - {fileID: 975648935}
-  - {fileID: 862930099}
-  - {fileID: 2113335555}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
   objective: {fileID: 360833399}
   spawnInterval: 2
   spawnIntervalVariation: 0.5
@@ -78015,8 +78015,8 @@ MonoBehaviour:
   playerColliders:
   - {fileID: 1521757868}
   slingshotOffset: {x: 0, y: -0.1, z: -0.1}
-  leftTriggerAction: {fileID: -5982496924579745919, guid: c348712bda248c246b8c49b3db54643f, type: 3}
   rightTriggerAction: {fileID: 83097790271614945, guid: c348712bda248c246b8c49b3db54643f, type: 3}
+  rightGripAction: {fileID: 0}
   slingshotPrefab: {fileID: 1415905140805972922, guid: b42a54cc8cf06364da24b4fe417f050b, type: 3}
   bombPrefab: {fileID: 3058811670986951373, guid: ee805878de8d04a4aa910988d59d5eb5, type: 3}
   trajectoryLine: {fileID: 1968842617}
@@ -78056,11 +78056,11 @@ MonoBehaviour:
   maxSpin: 720
   breakThreshold: 0.85
   maxBreakChance: 0.6
-  readyColor: {r: 0, g: 1, b: 0, a: 1}
-  idleColor: {r: 1, g: 0, b: 0, a: 1}
   elasticWidth: 0.01
-  elasticColor: {r: 0, g: 0, b: 0, a: 1}
   elasticMaterial: {fileID: 2100000, guid: 20cfcd03e5c05354f88984a7efe6723e, type: 2}
+  forceColorLow: {r: 0, g: 1, b: 0, a: 1}
+  forceColorMid: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  forceColorHigh: {r: 1, g: 0, b: 0, a: 1}
   elasticSegmentCount: 8
   elasticSlack: 1.2
   elasticGravityScale: 1

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class SlingshotController : MonoBehaviour
@@ -18,9 +18,9 @@ public class SlingshotController : MonoBehaviour
     [Header("Ajuste de posição")]
     public Vector3 slingshotOffset = new Vector3(0, -0.1f, 0);
 
-    [Header("Input")]
-    public InputActionReference leftTriggerAction;
+    [Header("Input (mão direita — trigger e grip testados em paralelo)")]
     public InputActionReference rightTriggerAction;
+    public InputActionReference rightGripAction;
 
     [Header("Prefabs")]
     public GameObject slingshotPrefab;
@@ -46,14 +46,12 @@ public class SlingshotController : MonoBehaviour
     [Range(0f, 1f)]
     public float maxBreakChance = 0.6f;   // chance de arrebentar bem no limite máximo
 
-    [Header("Feedback visual")]
-    public Color readyColor = Color.green;
-    public Color idleColor = Color.white;
-
-    [Header("Elástico (corda entre os joints, sempre visível)")]
+    [Header("Elástico (medidor de força: verde → amarelo → vermelho)")]
     public float elasticWidth = 0.01f;
-    public Color elasticColor = Color.black;
     public Material elasticMaterial;
+    public Color forceColorLow = Color.green;
+    public Color forceColorMid = Color.yellow;
+    public Color forceColorHigh = Color.red;
     [Range(2, 20)] public int elasticSegmentCount = 8;
     [Tooltip("Folga da corda em repouso. 1 = sempre esticada; acima disso ela sobra e balança.")]
     public float elasticSlack = 1.2f;
@@ -67,9 +65,6 @@ public class SlingshotController : MonoBehaviour
     // --- estado interno ---
     private GameObject currentSlingshot;
     private GameObject currentBomb;
-    private Renderer slingshotRenderer;
-    private Material slingshotMaterialInstance;
-    private Collider slingshotTriggerZone;
 
     private Transform slingshotTrecoTransform;
     private SlingshotPouch slingshotPouch;
@@ -82,7 +77,7 @@ public class SlingshotController : MonoBehaviour
 
     private bool isRightHandInZone;
     private bool isAiming;
-    private bool? lastSlingshotColorState;
+    private InputAction activeBombAction; // qual ação (trigger ou grip) está segurando a mira atual
 
     private Vector3[] trajectoryPoints;
 
@@ -91,56 +86,66 @@ public class SlingshotController : MonoBehaviour
     public float hapticPullInterval = 0.08f;
     private float hapticPullTimer;
 
-    void OnEnable()
-    {
-        leftTriggerAction.action.Enable();
-        rightTriggerAction.action.Enable();
-
-        leftTriggerAction.action.started += OnLeftTriggerPressed;
-        leftTriggerAction.action.canceled += OnLeftTriggerReleased;
-
-        rightTriggerAction.action.started += OnRightTriggerPressed;
-        rightTriggerAction.action.canceled += OnRightTriggerReleased;
-    }
-
-    void OnDisable()
-    {
-        leftTriggerAction.action.started -= OnLeftTriggerPressed;
-        leftTriggerAction.action.canceled -= OnLeftTriggerReleased;
-
-        rightTriggerAction.action.started -= OnRightTriggerPressed;
-        rightTriggerAction.action.canceled -= OnRightTriggerReleased;
-    }
-
-    // ---------- MÃO ESQUERDA (estilingue) ----------
-
-    void OnLeftTriggerPressed(InputAction.CallbackContext ctx)
+    void Start()
     {
         SpawnSlingshot();
     }
 
-    void OnLeftTriggerReleased(InputAction.CallbackContext ctx)
+    void OnEnable()
     {
-        CancelEverything();
+        if (rightTriggerAction != null)
+        {
+            rightTriggerAction.action.Enable();
+            rightTriggerAction.action.started += OnBombPressed;
+            rightTriggerAction.action.canceled += OnBombReleased;
+        }
+
+        if (rightGripAction != null)
+        {
+            rightGripAction.action.Enable();
+            rightGripAction.action.started += OnBombPressed;
+            rightGripAction.action.canceled += OnBombReleased;
+        }
     }
+
+    void OnDisable()
+    {
+        if (rightTriggerAction != null)
+        {
+            rightTriggerAction.action.started -= OnBombPressed;
+            rightTriggerAction.action.canceled -= OnBombReleased;
+        }
+
+        if (rightGripAction != null)
+        {
+            rightGripAction.action.started -= OnBombPressed;
+            rightGripAction.action.canceled -= OnBombReleased;
+        }
+    }
+
+    void OnDestroy()
+    {
+        // evita vazar uma bomba presa no pool se o componente for destruído no meio de uma mira.
+        if (currentBomb == null) return;
+
+        PooledObject pooledBomb = currentBomb.GetComponent<PooledObject>();
+        if (pooledBomb != null) pooledBomb.ReturnToPool();
+        else Destroy(currentBomb);
+    }
+
+    // ---------- ESTILINGUE (sempre visível, preso na mão esquerda) ----------
 
     void SpawnSlingshot()
     {
         if (currentSlingshot != null) return;
 
         currentSlingshot = Instantiate(slingshotPrefab, leftHandTransform.position, leftHandTransform.rotation, leftHandTransform);
-        slingshotRenderer = currentSlingshot.GetComponentInChildren<Renderer>();
-        slingshotMaterialInstance = slingshotRenderer != null ? slingshotRenderer.material : null;
-        slingshotTriggerZone = currentSlingshot.GetComponentInChildren<Collider>();
 
         SlingshotZoneDetector detector = currentSlingshot.AddComponent<SlingshotZoneDetector>();
         detector.onHandEnter = () => isRightHandInZone = true;
         detector.onHandExit = () => isRightHandInZone = false;
 
         SetupTrecoAndElastics(currentSlingshot.transform);
-
-        lastSlingshotColorState = null;
-        SetSlingshotColor(idleColor);
     }
 
     void SetupTrecoAndElastics(Transform root)
@@ -150,6 +155,13 @@ public class SlingshotController : MonoBehaviour
         jointDireitoBase = FindDeepChild(root, "JointDireitoBase");
         jointEsquerdoTreco = FindDeepChild(root, "JointEsquerdoTreco");
         jointDireitoTreco = FindDeepChild(root, "JointDireitoTreco");
+
+        if (slingshotTrecoTransform == null) Debug.LogWarning("SlingshotController: não encontrei 'Slingshot_Treco' dentro do prefab do estilingue.");
+        if (jointEsquerdoBase == null) Debug.LogWarning("SlingshotController: não encontrei 'JointEsquerdoBase' dentro do prefab do estilingue.");
+        if (jointDireitoBase == null) Debug.LogWarning("SlingshotController: não encontrei 'JointDireitoBase' dentro do prefab do estilingue.");
+        if (jointEsquerdoTreco == null) Debug.LogWarning("SlingshotController: não encontrei 'JointEsquerdoTreco' dentro do prefab do estilingue.");
+        if (jointDireitoTreco == null) Debug.LogWarning("SlingshotController: não encontrei 'JointDireitoTreco' dentro do prefab do estilingue.");
+        if (elasticMaterial == null) Debug.LogWarning("SlingshotController: 'Elastic Material' não está atribuído no Inspector — o elástico pode renderizar com o material padrão (geralmente invisível/rosa em URP).");
 
         if (slingshotTrecoTransform != null && jointEsquerdoBase != null && jointDireitoBase != null)
         {
@@ -174,8 +186,8 @@ public class SlingshotController : MonoBehaviour
         LineRenderer lr = go.AddComponent<LineRenderer>();
         lr.widthMultiplier = elasticWidth;
         lr.numCapVertices = 4;
-        lr.startColor = elasticColor;
-        lr.endColor = elasticColor;
+        lr.startColor = forceColorLow;
+        lr.endColor = forceColorLow;
         if (elasticMaterial != null)
             lr.material = elasticMaterial;
 
@@ -184,6 +196,7 @@ public class SlingshotController : MonoBehaviour
         rope.slack = elasticSlack;
         rope.gravityScale = elasticGravityScale;
         rope.Initialize(start, end);
+        rope.SetColor(forceColorLow); // aplica a cor via MaterialPropertyBlock desde o primeiro frame
 
         return rope;
     }
@@ -200,46 +213,13 @@ public class SlingshotController : MonoBehaviour
         return null;
     }
 
-    void CancelEverything()
+    // ---------- BOMBA (mão direita — trigger ou grip, o que estiver conectado) ----------
+
+    void OnBombPressed(InputAction.CallbackContext ctx)
     {
-        if (currentBomb != null)
-        {
-            PooledObject pooledBomb = currentBomb.GetComponent<PooledObject>();
-            if (pooledBomb != null) pooledBomb.ReturnToPool();
-            else Destroy(currentBomb);
-        }
-        if (currentSlingshot != null) Destroy(currentSlingshot);
+        if (currentSlingshot == null || !isRightHandInZone || isAiming) return;
 
-        currentBomb = null;
-        currentSlingshot = null;
-        slingshotRenderer = null;
-        slingshotMaterialInstance = null;
-        lastSlingshotColorState = null;
-        isAiming = false;
-        isRightHandInZone = false;
-        trajectoryLine.enabled = false;
-
-        slingshotTrecoTransform = null;
-        slingshotPouch = null;
-        jointEsquerdoBase = null;
-        jointDireitoBase = null;
-        jointEsquerdoTreco = null;
-        jointDireitoTreco = null;
-        elasticoEsquerdo = null;
-        elasticoDireito = null;
-    }
-
-    void SetSlingshotColor(Color color)
-    {
-        if (slingshotMaterialInstance != null)
-            slingshotMaterialInstance.color = color;
-    }
-
-    // ---------- MÃO DIREITA (bomba) ----------
-
-    void OnRightTriggerPressed(InputAction.CallbackContext ctx)
-    {
-        if (currentSlingshot == null || !isRightHandInZone) return;
+        activeBombAction = ctx.action;
 
         currentBomb = ObjectPoolManager.Instance.Get(bombPrefab, bombSpawnPoint.position, Quaternion.identity);
 
@@ -262,12 +242,15 @@ public class SlingshotController : MonoBehaviour
         trajectoryLine.enabled = true;
     }
 
-    void OnRightTriggerReleased(InputAction.CallbackContext ctx)
+    void OnBombReleased(InputAction.CallbackContext ctx)
     {
-        if (!isAiming || currentBomb == null) return;
+        // só a mesma ação que iniciou a mira pode terminá-la — evita soltar com o grip
+        // uma mira que começou pelo trigger (ou vice-versa) enquanto os dois estão testados juntos.
+        if (!isAiming || currentBomb == null || ctx.action != activeBombAction) return;
 
         LaunchBomb();
         isAiming = false;
+        activeBombAction = null;
         trajectoryLine.enabled = false;
     }
 
@@ -363,15 +346,12 @@ public class SlingshotController : MonoBehaviour
         return direction * curveValue * launchForceMultiplier;
     }
 
-    // ---------- LOOP: cor (não sensível a ordem de tracking) ----------
-
-    void Update()
+    Color EvaluateForceColor(float t)
     {
-        if (currentSlingshot != null && lastSlingshotColorState != isRightHandInZone)
-        {
-            lastSlingshotColorState = isRightHandInZone;
-            SetSlingshotColor(isRightHandInZone ? readyColor : idleColor);
-        }
+        t = Mathf.Clamp01(t);
+        return t < 0.5f
+            ? Color.Lerp(forceColorLow, forceColorMid, t / 0.5f)
+            : Color.Lerp(forceColorMid, forceColorHigh, (t - 0.5f) / 0.5f);
     }
 
     // ---------- LOOP: mira e trajetória (roda depois do tracking atualizar) ----------
@@ -385,6 +365,7 @@ public class SlingshotController : MonoBehaviour
             currentSlingshot.transform.rotation = leftHandTransform.rotation;
 
             UpdateTreco();
+            UpdateElasticForceColor();
         }
 
         if (isAiming && currentBomb != null)
@@ -411,6 +392,15 @@ public class SlingshotController : MonoBehaviour
             slingshotPouch.Pin(rightHandTransform.position); // treco vem junto com a mão que está puxando a bomba
         else
             slingshotPouch.Release(); // cai livre até as amarras esticarem, igual um estilingue de verdade
+    }
+
+    void UpdateElasticForceColor()
+    {
+        float force = isAiming ? GetNormalizedPull() : 0f;
+        Color color = EvaluateForceColor(force);
+
+        elasticoEsquerdo?.SetColor(color);
+        elasticoDireito?.SetColor(color);
     }
 
     void DrawTrajectory(Vector3 startPos, Vector3 startVelocity)

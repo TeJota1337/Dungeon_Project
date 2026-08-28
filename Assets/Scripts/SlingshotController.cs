@@ -62,6 +62,12 @@ public class SlingshotController : MonoBehaviour
     public float pouchGravityScale = 1f;
     [Range(0f, 1f)] public float pouchDamping = 0.95f;
 
+    [Header("Dobra do estilingue (blend shape)")]
+    [Tooltip("Nome do parâmetro de blend shape a ativar na base e no treco enquanto o jogador puxa.")]
+    public string bendBlendShapeName = "BEND";
+    [Tooltip("Peso do blend shape (0-100) no pico do puxão máximo.")]
+    public float maxBendWeight = 100f;
+
     // --- estado interno ---
     private GameObject currentSlingshot;
     private GameObject currentBomb;
@@ -74,6 +80,16 @@ public class SlingshotController : MonoBehaviour
     private Transform jointDireitoTreco;
     private VerletRope elasticoEsquerdo;
     private VerletRope elasticoDireito;
+
+    private SkinnedMeshRenderer baseSkinnedRenderer;
+    private SkinnedMeshRenderer trecoSkinnedRenderer;
+    private int baseBendIndex = -1;
+    private int trecoBendIndex = -1;
+    private BlendShapeAnchor anchorEsquerdoBase;
+    private BlendShapeAnchor anchorDireitoBase;
+    private BlendShapeAnchor anchorEsquerdoTreco;
+    private BlendShapeAnchor anchorDireitoTreco;
+    private bool bendActive;
 
     private bool isRightHandInZone;
     private bool isAiming;
@@ -163,6 +179,8 @@ public class SlingshotController : MonoBehaviour
         if (jointDireitoTreco == null) Debug.LogWarning("SlingshotController: não encontrei 'JointDireitoTreco' dentro do prefab do estilingue.");
         if (elasticMaterial == null) Debug.LogWarning("SlingshotController: 'Elastic Material' não está atribuído no Inspector — o elástico pode renderizar com o material padrão (geralmente invisível/rosa em URP).");
 
+        SetupBend(root);
+
         if (slingshotTrecoTransform != null && jointEsquerdoBase != null && jointDireitoBase != null)
         {
             slingshotPouch = slingshotTrecoTransform.gameObject.AddComponent<SlingshotPouch>();
@@ -176,6 +194,40 @@ public class SlingshotController : MonoBehaviour
 
         if (jointDireitoBase != null && jointDireitoTreco != null)
             elasticoDireito = CreateElasticRope(root, "ElasticoDireito", jointDireitoBase, jointDireitoTreco);
+    }
+
+    void SetupBend(Transform root)
+    {
+        Transform slingshotBaseTransform = FindDeepChild(root, "Slingshot");
+
+        baseSkinnedRenderer = slingshotBaseTransform != null ? slingshotBaseTransform.GetComponentInChildren<SkinnedMeshRenderer>() : null;
+        trecoSkinnedRenderer = slingshotTrecoTransform != null ? slingshotTrecoTransform.GetComponentInChildren<SkinnedMeshRenderer>() : null;
+
+        if (baseSkinnedRenderer == null) Debug.LogWarning("SlingshotController: não encontrei um SkinnedMeshRenderer em 'Slingshot' pra dobrar com o blend shape.");
+        if (trecoSkinnedRenderer == null) Debug.LogWarning("SlingshotController: não encontrei um SkinnedMeshRenderer em 'Slingshot_Treco' pra dobrar com o blend shape.");
+
+        if (baseSkinnedRenderer != null && !baseSkinnedRenderer.sharedMesh.isReadable)
+            Debug.LogWarning("SlingshotController: a malha da base não tem 'Read/Write Enabled' no import — o BakeMesh usado pra mover os joints ao dobrar pode falhar num build.");
+        if (trecoSkinnedRenderer != null && !trecoSkinnedRenderer.sharedMesh.isReadable)
+            Debug.LogWarning("SlingshotController: a malha do treco não tem 'Read/Write Enabled' no import — o BakeMesh usado pra mover os joints ao dobrar pode falhar num build.");
+
+        baseBendIndex = baseSkinnedRenderer != null ? baseSkinnedRenderer.sharedMesh.GetBlendShapeIndex(bendBlendShapeName) : -1;
+        trecoBendIndex = trecoSkinnedRenderer != null ? trecoSkinnedRenderer.sharedMesh.GetBlendShapeIndex(bendBlendShapeName) : -1;
+
+        if (baseSkinnedRenderer != null && baseBendIndex < 0) Debug.LogWarning($"SlingshotController: blend shape '{bendBlendShapeName}' não existe na malha da base do estilingue.");
+        if (trecoSkinnedRenderer != null && trecoBendIndex < 0) Debug.LogWarning($"SlingshotController: blend shape '{bendBlendShapeName}' não existe na malha do treco.");
+
+        if (baseBendIndex >= 0)
+        {
+            if (jointEsquerdoBase != null) anchorEsquerdoBase = new BlendShapeAnchor(baseSkinnedRenderer, jointEsquerdoBase);
+            if (jointDireitoBase != null) anchorDireitoBase = new BlendShapeAnchor(baseSkinnedRenderer, jointDireitoBase);
+        }
+
+        if (trecoBendIndex >= 0)
+        {
+            if (jointEsquerdoTreco != null) anchorEsquerdoTreco = new BlendShapeAnchor(trecoSkinnedRenderer, jointEsquerdoTreco);
+            if (jointDireitoTreco != null) anchorDireitoTreco = new BlendShapeAnchor(trecoSkinnedRenderer, jointDireitoTreco);
+        }
     }
 
     VerletRope CreateElasticRope(Transform parent, string objName, Transform start, Transform end)
@@ -364,8 +416,11 @@ public class SlingshotController : MonoBehaviour
             currentSlingshot.transform.position = spawnPos;
             currentSlingshot.transform.rotation = leftHandTransform.rotation;
 
+            float pullForce = isAiming ? GetNormalizedPull() : 0f;
+
             UpdateTreco();
-            UpdateElasticForceColor();
+            UpdateBend(pullForce);
+            UpdateElasticForceColor(pullForce);
         }
 
         if (isAiming && currentBomb != null)
@@ -394,10 +449,43 @@ public class SlingshotController : MonoBehaviour
             slingshotPouch.Release(); // cai livre até as amarras esticarem, igual um estilingue de verdade
     }
 
-    void UpdateElasticForceColor()
+    void UpdateBend(float pullForce)
     {
-        float force = isAiming ? GetNormalizedPull() : 0f;
-        Color color = EvaluateForceColor(force);
+        bool shouldBend = pullForce > 0f;
+
+        if (shouldBend)
+        {
+            float weight = pullForce * maxBendWeight;
+
+            if (baseBendIndex >= 0) baseSkinnedRenderer.SetBlendShapeWeight(baseBendIndex, weight);
+            if (trecoBendIndex >= 0) trecoSkinnedRenderer.SetBlendShapeWeight(trecoBendIndex, weight);
+
+            // move os joints junto com a dobra — sem isso o elástico e o pêndulo do treco
+            // ficariam "presos" na pose reta enquanto a malha visualmente dobra.
+            anchorEsquerdoBase?.UpdateFollow();
+            anchorDireitoBase?.UpdateFollow();
+            anchorEsquerdoTreco?.UpdateFollow();
+            anchorDireitoTreco?.UpdateFollow();
+
+            bendActive = true;
+        }
+        else if (bendActive)
+        {
+            if (baseBendIndex >= 0) baseSkinnedRenderer.SetBlendShapeWeight(baseBendIndex, 0f);
+            if (trecoBendIndex >= 0) trecoSkinnedRenderer.SetBlendShapeWeight(trecoBendIndex, 0f);
+
+            anchorEsquerdoBase?.ResetToRest();
+            anchorDireitoBase?.ResetToRest();
+            anchorEsquerdoTreco?.ResetToRest();
+            anchorDireitoTreco?.ResetToRest();
+
+            bendActive = false;
+        }
+    }
+
+    void UpdateElasticForceColor(float pullForce)
+    {
+        Color color = EvaluateForceColor(pullForce);
 
         elasticoEsquerdo?.SetColor(color);
         elasticoDireito?.SetColor(color);

@@ -6,6 +6,8 @@ public class SpawnManager : MonoBehaviour
     public static SpawnManager Instance { get; private set; }
 
     public GameObject enemyPrefab;
+    [Tooltip("Tipos de inimigo sorteados a cada spawn (peso relativo em EnemyDefinition.spawnWeight). Deixe vazio pra usar os valores padrão do prefab.")]
+    public EnemyDefinition[] enemyDefinitions;
     public Transform[] spawnPoints;
     public Transform objective;
     public float spawnInterval = 2f;
@@ -71,6 +73,29 @@ public class SpawnManager : MonoBehaviour
         GameObject enemy = ObjectPoolManager.Instance.Get(enemyPrefab, point.position, point.rotation);
 
         EnemyAI ai = enemy.GetComponent<EnemyAI>();
-        ai.Init(objective);
+        ai.Init(objective, PickDefinition());
+    }
+
+    // Sorteio ponderado por EnemyDefinition.spawnWeight (peso 1 = padrão; maior spawna mais).
+    EnemyDefinition PickDefinition()
+    {
+        if (enemyDefinitions == null || enemyDefinitions.Length == 0) return null;
+
+        float totalWeight = 0f;
+        foreach (var def in enemyDefinitions)
+            totalWeight += Mathf.Max(0f, def.spawnWeight);
+
+        if (totalWeight <= 0f) return enemyDefinitions[Random.Range(0, enemyDefinitions.Length)];
+
+        float roll = Random.Range(0f, totalWeight);
+        float cumulative = 0f;
+
+        foreach (var def in enemyDefinitions)
+        {
+            cumulative += Mathf.Max(0f, def.spawnWeight);
+            if (roll <= cumulative) return def;
+        }
+
+        return enemyDefinitions[enemyDefinitions.Length - 1];
     }
 }

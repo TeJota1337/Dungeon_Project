@@ -1,25 +1,11 @@
 using UnityEngine;
 
-[System.Serializable]
-public class VisualVariant
-{
-    public string variantName;
-    public GameObject visualPrefab;
-    public Avatar avatar; // NOVO: cada variante carrega seu pr�prio Avatar (Generic)
-}
-
 public class EnemyVisualRandomizer : MonoBehaviour
 {
     [Header("Onde instanciar o modelo escolhido")]
     public Transform visualParent;
 
-    [Header("Escala do modelo")]
-    public float visualScale = 0.7f;
-
-    [Header("Varia��es visuais poss�veis")]
-    public VisualVariant[] visualVariants;
-
-    [Header("Anima��o")]
+    [Header("Anima��o (compartilhada entre todos os tipos de inimigo)")]
     public RuntimeAnimatorController baseWalkController;
     public AnimationClip[] walkClips;
     public string walkClipNameInController = "Walk";
@@ -28,9 +14,10 @@ public class EnemyVisualRandomizer : MonoBehaviour
     private Animator spawnedAnimator;
     private VisualVariant chosenVariant;
 
-    public Renderer[] Initialize()
+    // O visual (variantes + escala) vem do EnemyDefinition sorteado pelo SpawnManager pra este spawn.
+    public Renderer[] Initialize(EnemyDefinition definition)
     {
-        SpawnRandomVisual();
+        SpawnRandomVisual(definition);
         SetupAnimator();
 
         return spawnedVisual != null
@@ -38,7 +25,7 @@ public class EnemyVisualRandomizer : MonoBehaviour
             : new Renderer[0];
     }
 
-    void SpawnRandomVisual()
+    void SpawnRandomVisual(EnemyDefinition definition)
     {
         // objeto pode estar sendo reaproveitado do pool: remove o modelo do uso anterior antes de sortear outro
         if (spawnedVisual != null)
@@ -48,6 +35,7 @@ public class EnemyVisualRandomizer : MonoBehaviour
             spawnedAnimator = null;
         }
 
+        VisualVariant[] visualVariants = definition != null ? definition.visualVariants : null;
         if (visualVariants == null || visualVariants.Length == 0) return;
 
         chosenVariant = visualVariants[Random.Range(0, visualVariants.Length)];
@@ -56,7 +44,7 @@ public class EnemyVisualRandomizer : MonoBehaviour
         spawnedVisual = Instantiate(chosenVariant.visualPrefab, visualParent);
         spawnedVisual.transform.localPosition = Vector3.zero;
         spawnedVisual.transform.localRotation = Quaternion.identity;
-        spawnedVisual.transform.localScale = Vector3.one * visualScale; // NOVO
+        spawnedVisual.transform.localScale = Vector3.one * definition.visualScale;
     }
 
     void SetupAnimator()

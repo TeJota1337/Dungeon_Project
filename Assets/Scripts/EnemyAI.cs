@@ -69,6 +69,9 @@ public class EnemyAI : MonoBehaviour, IPoolable
     private float wanderTimer;
     private float nextWanderInterval;
 
+    private EnemyDefinition currentDefinition;
+    private float baseTotalHeight, baseZoneWidth, baseBottomOffset; // dimens�es das zonas ANTES de qualquer escala de EnemyDefinition
+
     // ---------- SETUP PADR�O (roda ao adicionar o componente) ----------
 
     void Reset()
@@ -89,6 +92,10 @@ public class EnemyAI : MonoBehaviour, IPoolable
         agent = GetComponent<NavMeshAgent>();
         healthDisplay = GetComponentInChildren<EnemyHealthDisplay>();
         baseAgentSpeed = agent.speed;
+
+        baseTotalHeight = totalHeight;
+        baseZoneWidth = zoneWidth;
+        baseBottomOffset = bottomOffset;
     }
 
     // ---------- POOLING: reinicializa tudo que era feito em Awake/Start,
@@ -108,10 +115,21 @@ public class EnemyAI : MonoBehaviour, IPoolable
             flashRoutine = null;
         }
 
-        // sorteia e instancia o modelo visual antes de capturar renderers
+        // vida/velocidade/visual dependem do EnemyDefinition, que só chega em Init() -
+        // essa parte roda aqui pq n�o depende de qual tipo de inimigo este spawn � (v. IPoolable)
+        agent.avoidancePriority = Random.Range(minAvoidancePriority, maxAvoidancePriority + 1);
+
+        wanderTimer = 0f;
+        nextWanderInterval = Random.Range(minWanderInterval, maxWanderInterval);
+    }
+
+    // Aplica os dados do tipo sorteado pelo SpawnManager (ou os valores padr�o do
+    // pr�prio prefab, se null) - visual, vida, velocidade e escala das zonas de dano.
+    void ApplyDefinition()
+    {
         EnemyVisualRandomizer visualRandomizer = GetComponent<EnemyVisualRandomizer>();
         renderers = visualRandomizer != null
-            ? visualRandomizer.Initialize()
+            ? visualRandomizer.Initialize(currentDefinition)
             : GetComponentsInChildren<Renderer>();
 
         originalColors = new Color[renderers.Length];
@@ -120,17 +138,25 @@ public class EnemyAI : MonoBehaviour, IPoolable
             originalColors[i] = renderers[i].material.color;
         }
 
-        health = Random.Range(minHealth, maxHealth + 1);
+        int rollMinHealth = currentDefinition != null ? currentDefinition.minHealth : minHealth;
+        int rollMaxHealth = currentDefinition != null ? currentDefinition.maxHealth : maxHealth;
+        health = Random.Range(rollMinHealth, rollMaxHealth + 1);
         rolledMax = health;
 
         if (healthDisplay != null)
             healthDisplay.Initialize(health);
 
-        agent.speed = baseAgentSpeed * Random.Range(minSpeedMultiplier, maxSpeedMultiplier);
-        agent.avoidancePriority = Random.Range(minAvoidancePriority, maxAvoidancePriority + 1);
+        agent.speed = currentDefinition != null
+            ? Random.Range(currentDefinition.minSpeed, currentDefinition.maxSpeed)
+            : baseAgentSpeed * Random.Range(minSpeedMultiplier, maxSpeedMultiplier);
 
-        wanderTimer = 0f;
-        nextWanderInterval = Random.Range(minWanderInterval, maxWanderInterval);
+        // reescala as zonas de dano junto com o visual, pra o hitbox n�o ficar
+        // desalinhado quando o EnemyDefinition muda o tamanho do modelo
+        float scale = currentDefinition != null ? currentDefinition.visualScale : 1f;
+        totalHeight = baseTotalHeight * scale;
+        zoneWidth = baseZoneWidth * scale;
+        bottomOffset = baseBottomOffset * scale;
+        RecalculateZoneLayout();
     }
 
     public void OnReturnToPool()
@@ -146,10 +172,14 @@ public class EnemyAI : MonoBehaviour, IPoolable
         GameStateManager.Instance?.CheckVictoryCondition();
     }
 
-    // Chamado explicitamente por quem spawna o inimigo (SpawnManager), depois de tirá-lo do pool
-    public void Init(Transform newObjective)
+    // Chamado explicitamente por quem spawna o inimigo (SpawnManager), depois de tirá-lo do pool.
+    // definition pode ser null (usa os valores padrão do próprio prefab: minHealth/maxHealth etc.)
+    public void Init(Transform newObjective, EnemyDefinition definition = null)
     {
         objective = newObjective;
+        currentDefinition = definition;
+
+        ApplyDefinition();
 
         if (objective != null)
             agent.SetDestination(objective.position);

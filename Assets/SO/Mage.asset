@@ -18,6 +18,7 @@ MonoBehaviour:
     visualPrefab: {fileID: 919132149155446097, guid: 8ef43bde5a541ee4cb8ea1942be13526, type: 3}
     avatar: {fileID: 9000000, guid: 8ef43bde5a541ee4cb8ea1942be13526, type: 3}
   visualScale: 0.7
+  zoneScaleMultiplier: 1.2
   minHealth: 8
   maxHealth: 11
   minSpeed: 2.5

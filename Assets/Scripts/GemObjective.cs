@@ -21,6 +21,8 @@ public class GemObjective : MonoBehaviour
     [Header("Barra de vida (Feel)")]
     public GemHealthBar healthBar;
 
+    public int CurrentHealth => currentHealth;
+
     private int currentHealth;
     private Renderer[] renderers;
     private Color[] originalColors;

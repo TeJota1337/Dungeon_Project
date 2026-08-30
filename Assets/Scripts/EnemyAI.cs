@@ -39,10 +39,15 @@ public class EnemyAI : MonoBehaviour, IPoolable
     public float hitFlashDuration = 0.15f;
 
     [Header("Zonas de Dano")]
-    public float bottomOffset = 0f;   // onde o bloco de zonas COME�A (base), em Y local
-    public float totalHeight = 2f;    // altura total do bloco (onde TERMINA = bottomOffset + totalHeight)
-    public float zoneWidth = 0.6f;    // largura/profundidade de cada zona (eixos X e Z)
+    [Tooltip("Onde o bloco de zonas COMEÇA (base), em Y local. NÃO escala com o inimigo — fica ancorado perto dos pés, e o bloco cresce pra CIMA a partir daqui.")]
+    public float bottomOffset = 0f;
+    public float totalHeight = 2f;    // altura BASE do bloco (sem escala), escalada por appliedZoneScale a partir do bottomOffset
+    public float zoneWidth = 0.6f;    // largura/profundidade BASE de cada zona (eixos X e Z)
     public ZoneConfig[] zones = new ZoneConfig[4];
+
+    [Header("Preview no Editor (não afeta o sorteio real do SpawnManager)")]
+    [Tooltip("Atribui um EnemyDefinition aqui só pra pré-visualizar como as zonas ficam com o Visual Scale/Zone Scale Multiplier dele, direto na Scene View, sem precisar dar Play.")]
+    public EnemyDefinition previewDefinition;
 
     [Header("Varia��o de Movimento")]
     [Tooltip("Multiplicadores sorteados sobre a velocidade base do NavMeshAgent do prefab, pra nem todo inimigo andar igual.")]
@@ -70,7 +75,8 @@ public class EnemyAI : MonoBehaviour, IPoolable
     private float nextWanderInterval;
 
     private EnemyDefinition currentDefinition;
-    private float baseTotalHeight, baseZoneWidth, baseBottomOffset; // dimens�es das zonas ANTES de qualquer escala de EnemyDefinition
+    private float appliedZoneScale = 1f; // Visual Scale * Zone Scale Multiplier do EnemyDefinition ativo (spawn real) ou de preview (Editor)
+    private EnemyDefinition subscribedPreviewDefinition;
 
     // ---------- SETUP PADR�O (roda ao adicionar o componente) ----------
 
@@ -92,10 +98,21 @@ public class EnemyAI : MonoBehaviour, IPoolable
         agent = GetComponent<NavMeshAgent>();
         healthDisplay = GetComponentInChildren<EnemyHealthDisplay>();
         baseAgentSpeed = agent.speed;
+    }
 
-        baseTotalHeight = totalHeight;
-        baseZoneWidth = zoneWidth;
-        baseBottomOffset = bottomOffset;
+    void OnEnable()
+    {
+        SyncPreviewSubscription();
+        ApplyPreviewScaleIfEditing();
+        RecalculateZoneLayout();
+    }
+
+    void OnDisable()
+    {
+        if (subscribedPreviewDefinition != null)
+            subscribedPreviewDefinition.Changed -= HandlePreviewDefinitionChanged;
+
+        subscribedPreviewDefinition = null;
     }
 
     // ---------- POOLING: reinicializa tudo que era feito em Awake/Start,
@@ -151,11 +168,12 @@ public class EnemyAI : MonoBehaviour, IPoolable
             : baseAgentSpeed * Random.Range(minSpeedMultiplier, maxSpeedMultiplier);
 
         // reescala as zonas de dano junto com o visual, pra o hitbox n�o ficar
-        // desalinhado quando o EnemyDefinition muda o tamanho do modelo
-        float scale = currentDefinition != null ? currentDefinition.visualScale : 1f;
-        totalHeight = baseTotalHeight * scale;
-        zoneWidth = baseZoneWidth * scale;
-        bottomOffset = baseBottomOffset * scale;
+        // desalinhado quando o EnemyDefinition muda o tamanho do modelo.
+        // zoneScaleMultiplier existe pq Visual Scale sozinho nem sempre � proporcional
+        // ao tamanho real renderizado (modelos com propor��es diferentes) - d� pra compensar por tipo.
+        appliedZoneScale = currentDefinition != null
+            ? currentDefinition.visualScale * currentDefinition.zoneScaleMultiplier
+            : 1f;
         RecalculateZoneLayout();
     }
 
@@ -251,6 +269,7 @@ public class EnemyAI : MonoBehaviour, IPoolable
     public void TakeDamage(int amount, bool isCrit = false, Color? hitColor = null)
     {
         health -= amount;
+        GameStateManager.Instance?.RegisterDamage(amount);
 #if UNITY_EDITOR
         Debug.Log($"{name} tomou {amount} de dano{(isCrit ? " (CR�TICO)" : "")}. Vida restante: {health}/{rolledMax}");
 #endif
@@ -265,6 +284,7 @@ public class EnemyAI : MonoBehaviour, IPoolable
 
         if (health <= 0)
         {
+            GameStateManager.Instance?.RegisterEnemyDefeated();
             GameAudio.Instance?.PlayEnemyDeath(transform.position);
             ReturnToPool();
         }
@@ -343,6 +363,8 @@ public class EnemyAI : MonoBehaviour, IPoolable
                 zones[i].previousPercent = zones[i].heightPercent;
         }
 
+        SyncPreviewSubscription();
+        ApplyPreviewScaleIfEditing();
         RecalculateZoneLayout();
     }
 
@@ -381,8 +403,12 @@ public class EnemyAI : MonoBehaviour, IPoolable
     {
         if (zones == null) return;
 
-        // o bloco vai de "bottomOffset" at� "bottomOffset + totalHeight"
-        float top = bottomOffset + totalHeight;
+        // bottomOffset fica FIXO (ancorado perto dos p�s) - s� altura/largura escalam,
+        // ent�o o bloco sempre cresce pra CIMA a partir da base, nunca "flutuando" longe do ch�o.
+        float scaledHeight = totalHeight * appliedZoneScale;
+        float scaledWidth = zoneWidth * appliedZoneScale;
+
+        float top = bottomOffset + scaledHeight;
         float currentTop = top;
 
         // processa em ORDEM REVERSA: o �LTIMO elemento do array fica no TOPO
@@ -392,7 +418,7 @@ public class EnemyAI : MonoBehaviour, IPoolable
             var zone = zones[i];
             if (zone.zoneCollider == null) continue;
 
-            float zoneHeight = Mathf.Max(zone.heightPercent * totalHeight, 0.001f);
+            float zoneHeight = Mathf.Max(zone.heightPercent * scaledHeight, 0.001f);
             float centerY = currentTop - zoneHeight / 2f;
 
             Transform zt = zone.zoneCollider.transform;
@@ -403,11 +429,43 @@ public class EnemyAI : MonoBehaviour, IPoolable
             if (zone.zoneCollider is BoxCollider box)
             {
                 box.center = Vector3.zero;
-                box.size = new Vector3(zoneWidth, zoneHeight, zoneWidth);
+                box.size = new Vector3(scaledWidth, zoneHeight, scaledWidth);
             }
 
             currentTop -= zoneHeight;
         }
+    }
+
+    // ---------- PREVIEW NO EDITOR: liga o Preview Definition ao recalculo em tempo real ----------
+
+    void SyncPreviewSubscription()
+    {
+        if (subscribedPreviewDefinition == previewDefinition) return;
+
+        if (subscribedPreviewDefinition != null)
+            subscribedPreviewDefinition.Changed -= HandlePreviewDefinitionChanged;
+
+        subscribedPreviewDefinition = previewDefinition;
+
+        if (subscribedPreviewDefinition != null)
+            subscribedPreviewDefinition.Changed += HandlePreviewDefinitionChanged;
+    }
+
+    void HandlePreviewDefinitionChanged()
+    {
+        ApplyPreviewScaleIfEditing();
+        RecalculateZoneLayout();
+    }
+
+    // Só mexe em appliedZoneScale fora do Play Mode - durante o jogo, quem manda nessa escala
+    // é o EnemyDefinition sorteado de verdade pelo SpawnManager (via ApplyDefinition()).
+    void ApplyPreviewScaleIfEditing()
+    {
+        if (Application.isPlaying) return;
+
+        appliedZoneScale = previewDefinition != null
+            ? previewDefinition.visualScale * previewDefinition.zoneScaleMultiplier
+            : 1f;
     }
 
     // ---------- GIZMOS ----------

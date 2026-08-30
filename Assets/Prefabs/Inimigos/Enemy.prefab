@@ -26,7 +26,7 @@ Transform:
   m_GameObject: {fileID: 1714476079284442564}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.3789721, z: 0}
+  m_LocalPosition: {x: 0, y: -0.19266382, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -51,7 +51,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.5, y: 0.39305565, z: 0.5}
+  m_Size: {x: 0.65, y: 0.5109723, z: 0.65}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &2535166374828457072
 GameObject:
@@ -138,6 +138,15 @@ MonoBehaviour:
     damageMultiplier: 1.5
     gizmoColor: {r: 1, g: 0, b: 0, a: 1}
     previousPercent: 0.15302068
+  previewDefinition: {fileID: 11400000, guid: 4ffc81730abc2304e875c665518a7683, type: 2}
+  minSpeedMultiplier: 0.85
+  maxSpeedMultiplier: 1.2
+  minWanderInterval: 1.5
+  maxWanderInterval: 3.5
+  wanderRadius: 0.75
+  wanderMinDistanceFromObjective: 2
+  minAvoidancePriority: 10
+  maxAvoidancePriority: 90
 --- !u!195 &7834773180973335897
 NavMeshAgent:
   m_ObjectHideFlags: 0
@@ -173,20 +182,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyVisualRandomizer
   visualParent: {fileID: 3406166065635504815}
-  visualScale: 0.7
-  visualVariants:
-  - variantName: Mage
-    visualPrefab: {fileID: 919132149155446097, guid: 8ef43bde5a541ee4cb8ea1942be13526, type: 3}
-    avatar: {fileID: 9000000, guid: 8ef43bde5a541ee4cb8ea1942be13526, type: 3}
-  - variantName: Minion
-    visualPrefab: {fileID: 919132149155446097, guid: 31c008f4b9dde3c4496f14fc7fd55ad5, type: 3}
-    avatar: {fileID: 9000000, guid: 31c008f4b9dde3c4496f14fc7fd55ad5, type: 3}
-  - variantName: Rogue
-    visualPrefab: {fileID: 919132149155446097, guid: 323cf6a2c7958dc45b90a0b529214e89, type: 3}
-    avatar: {fileID: 9000000, guid: 323cf6a2c7958dc45b90a0b529214e89, type: 3}
-  - variantName: Warrior
-    visualPrefab: {fileID: 919132149155446097, guid: 9665b0a80db460f4a9084862ddcdba45, type: 3}
-    avatar: {fileID: 9000000, guid: 9665b0a80db460f4a9084862ddcdba45, type: 3}
   baseWalkController: {fileID: 9100000, guid: 3479bd5b76f362445bb521e178831f96, type: 2}
   walkClips:
   - {fileID: 7400000, guid: 263544635479a6447b1a5fccc8eb0947, type: 2}
@@ -470,7 +465,7 @@ Transform:
   m_GameObject: {fileID: 5233804667469064550}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.044012338, z: 0}
+  m_LocalPosition: {x: 0, y: 0.35721597, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -495,7 +490,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.5, y: 0.45291328, z: 0.5}
+  m_Size: {x: 0.65, y: 0.58878726, z: 0.65}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &6258950832033946182
 GameObject:
@@ -523,7 +518,7 @@ Transform:
   m_GameObject: {fileID: 6258950832033946182}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.7877499, z: 0}
+  m_LocalPosition: {x: 0, y: -0.72407496, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -548,7 +543,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.5, y: 0.42449993, z: 0.5}
+  m_Size: {x: 0.65, y: 0.5518499, z: 0.65}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &8850582954073033807
 GameObject:
@@ -576,7 +571,7 @@ Transform:
   m_GameObject: {fileID: 8850582954073033807}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.38523448, z: 0}
+  m_LocalPosition: {x: 0, y: 0.80080473, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -601,5 +596,5 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.5, y: 0.22953102, z: 0.5}
+  m_Size: {x: 0.65, y: 0.29839033, z: 0.65}
   m_Center: {x: 0, y: 0, z: 0}

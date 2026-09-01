@@ -99,8 +99,18 @@ public class GameOverUI : MonoBehaviour
         leaderboardUI?.Refresh(updatedRanking);
     }
 
-    // Chamado pelo botão "Restart" via OnClick() no Inspector
+    // Chamado pelo botão "Restart" via OnClick() no Inspector - recarrega e pula direto pro
+    // jogo, sem passar pela tela inicial de novo.
     public void Restart()
+    {
+        GameStateManager.SkipStartMenu = true;
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    // Chamado pelo botão "Voltar ao Menu" via OnClick() no Inspector - mesma coisa que Restart(),
+    // mas SEM pular a tela inicial (SkipStartMenu fica false, então o StartMenuUI aparece de novo).
+    public void ReturnToMenu()
     {
         Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);

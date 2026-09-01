@@ -10,6 +10,10 @@ public class GameStateManager : MonoBehaviour
 {
     public static GameStateManager Instance { get; private set; }
 
+    // Setado por GameOverUI.Restart() antes de recarregar a cena - avisa o StartMenuUI pra
+    // pular a tela inicial e ir direto pro jogo (ReturnToMenu() não mexe nisso, então volta a mostrar o menu).
+    public static bool SkipStartMenu;
+
     [Header("Referências")]
     public SpawnManager spawnManager;
     public GameOverUI gameOverUI;
@@ -46,13 +50,13 @@ public class GameStateManager : MonoBehaviour
     public void TriggerDefeat()
     {
         GameAudio.Instance?.PlayDefeatSting();
-        EndGame(false, "Derrota!\nA pedra foi destruída.");
+        EndGame(false, "Defeat!\nThe relic was destroyed.");
     }
 
     public void TriggerVictory()
     {
         GameAudio.Instance?.PlayVictorySting();
-        EndGame(true, "Vitória!\nVocê protegeu a pedra.");
+        EndGame(true, "Victory!\nYou protected the relic.");
     }
 
     // Chamado quando o SpawnManager termina as waves E sempre que um inimigo é

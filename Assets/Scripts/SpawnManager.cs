@@ -38,9 +38,13 @@ public class SpawnManager : MonoBehaviour
 
     void Start()
     {
-        startTime = Time.time;
         EnemyAI.ActiveCount = 0; // garante estado limpo se a cena recarregou (restart)
+    }
 
+    // Chamado pelo StartMenuUI quando o jogador clica "Iniciar" - não começa mais sozinho no Start().
+    public void BeginGame()
+    {
+        startTime = Time.time;
         StartCoroutine(SpawnRoutine());
     }
 

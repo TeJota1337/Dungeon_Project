@@ -59,4 +59,11 @@ public static class Leaderboard
         PlayerPrefs.SetString(PrefsKey, json);
         PlayerPrefs.Save();
     }
+
+    // Apaga o ranking salvo (botão de reset no CanvasScore, ver LeaderboardUI.ResetLeaderboard).
+    public static void Clear()
+    {
+        PlayerPrefs.DeleteKey(PrefsKey);
+        PlayerPrefs.Save();
+    }
 }

@@ -23,8 +23,20 @@ public class ZoneConfig
 [RequireComponent(typeof(NavMeshAgent))]
 public class EnemyAI : MonoBehaviour, IPoolable
 {
-    [Header("Navega��o")]
-    public Transform objective;
+    // Sequência de objetivo do esqueleto ladrão (GDD 2, seção 5): procura a GoldPile mais
+    // próxima, rouba, volta pro spawn de onde nasceu. Morrer no meio do caminho de volta
+    // dropa o ouro carregado (ver TakeDamage).
+    enum State { SeekingPile, Returning }
+
+    [Header("Roubo (fallback se Init() não vier de um EnemyDefinition)")]
+    public int minSteal = 10;
+    public int maxSteal = 25;
+
+    [Header("Ouro dropado ao morrer carregando um roubo")]
+    public GameObject droppedGoldPrefab;
+
+    [Header("Visual ao carregar ouro (placeholder — GDD 2, pendência #7)")]
+    public Color carryingTintColor = new Color(1f, 0.85f, 0.2f);
 
     [Header("Vida")]
     public int minHealth = 5;
@@ -77,6 +89,11 @@ public class EnemyAI : MonoBehaviour, IPoolable
     private EnemyDefinition currentDefinition;
     private float appliedZoneScale = 1f; // Visual Scale * Zone Scale Multiplier do EnemyDefinition ativo (spawn real) ou de preview (Editor)
     private EnemyDefinition subscribedPreviewDefinition;
+
+    private State state;
+    private Transform homeSpawn;   // pra onde voltar depois de roubar (GDD 2, pendência #4 ainda depende disso)
+    private GoldPile targetPile;
+    private int carriedGold;
 
     // ---------- SETUP PADR�O (roda ao adicionar o componente) ----------
 
@@ -138,6 +155,8 @@ public class EnemyAI : MonoBehaviour, IPoolable
 
         wanderTimer = 0f;
         nextWanderInterval = Random.Range(minWanderInterval, maxWanderInterval);
+
+        carriedGold = 0;
     }
 
     // Aplica os dados do tipo sorteado pelo SpawnManager (ou os valores padr�o do
@@ -175,6 +194,9 @@ public class EnemyAI : MonoBehaviour, IPoolable
             ? currentDefinition.visualScale * currentDefinition.zoneScaleMultiplier
             : 1f;
         RecalculateZoneLayout();
+
+        // garante que um objeto reciclado do pool n�o nasce "tingido de ouro" de uma vida anterior
+        UpdateCarryingVisual();
     }
 
     public void OnReturnToPool()
@@ -187,69 +209,106 @@ public class EnemyAI : MonoBehaviour, IPoolable
             flashRoutine = null;
         }
 
-        GameStateManager.Instance?.CheckVictoryCondition();
+        // vit�ria agora � decidida diretamente pelo SpawnManager (RunWaves), que espera
+        // ActiveCount == 0 ao fim da �ltima wave - n�o precisa mais consultar daqui.
     }
 
     // Chamado explicitamente por quem spawna o inimigo (SpawnManager), depois de tirá-lo do pool.
-    // definition pode ser null (usa os valores padrão do próprio prefab: minHealth/maxHealth etc.)
-    public void Init(Transform newObjective, EnemyDefinition definition = null)
+    // spawnPoint é de onde ele nasceu (e pra onde volta depois de roubar); definition pode ser
+    // null (usa os valores padrão do próprio prefab: minHealth/maxHealth/minSteal/maxSteal etc.)
+    public void Init(Transform spawnPoint, EnemyDefinition definition = null)
     {
-        objective = newObjective;
+        homeSpawn = spawnPoint;
         currentDefinition = definition;
 
         ApplyDefinition();
 
-        if (objective != null)
-            agent.SetDestination(objective.position);
+        state = State.SeekingPile;
+        PickNewTargetPile();
+    }
+
+    void PickNewTargetPile()
+    {
+        targetPile = DungeonGoldManager.Instance != null
+            ? DungeonGoldManager.Instance.FindNearestPile(transform.position)
+            : null;
+
+        if (targetPile != null)
+            agent.SetDestination(targetPile.transform.position);
     }
 
     void Update()
     {
-        if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
+        // nenhuma pilha disponível agora (raro - normalmente significa que o total já zerou e a
+        // derrota já disparou via DungeonGoldManager); tenta de novo até algo aparecer ou o jogo
+        // congelar por causa do fim de jogo.
+        if (state == State.SeekingPile && targetPile == null)
         {
-            OnReachObjective();
+            PickNewTargetPile();
             return;
         }
 
-        UpdateWander();
+        if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
+        {
+            if (state == State.SeekingPile) OnReachPile();
+            else OnReachSpawn();
+            return;
+        }
+
+        Vector3 currentTarget = state == State.SeekingPile ? targetPile.transform.position : homeSpawn.position;
+        UpdateWander(currentTarget);
     }
 
-    void UpdateWander()
+    void UpdateWander(Vector3 target)
     {
-        if (objective == null) return;
-
         wanderTimer += Time.deltaTime;
         if (wanderTimer < nextWanderInterval) return;
 
         wanderTimer = 0f;
         nextWanderInterval = Random.Range(minWanderInterval, maxWanderInterval);
 
-        float distanceToObjective = Vector3.Distance(transform.position, objective.position);
+        float distanceToTarget = Vector3.Distance(transform.position, target);
 
-        if (distanceToObjective > wanderMinDistanceFromObjective)
+        if (distanceToTarget > wanderMinDistanceFromObjective)
         {
             Vector2 randomOffset = Random.insideUnitCircle * wanderRadius;
-            Vector3 wanderTarget = objective.position + new Vector3(randomOffset.x, 0f, randomOffset.y);
+            Vector3 wanderTarget = target + new Vector3(randomOffset.x, 0f, randomOffset.y);
             agent.SetDestination(wanderTarget);
         }
         else
         {
-            // perto o suficiente do objetivo: mira exato, sem desvio, pra garantir chegada limpa
-            agent.SetDestination(objective.position);
+            // perto o suficiente do alvo: mira exato, sem desvio, pra garantir chegada limpa
+            agent.SetDestination(target);
         }
     }
 
-    void OnReachObjective()
+    // Chegou na pilha: rouba (GoldPile.Withdraw já garante que nunca fica negativa) e parte
+    // pro caminho de volta. Se outro esqueleto esvaziou a pilha bem na hora, procura outra.
+    void OnReachPile()
     {
-        Debug.Log($"{name} chegou na dungeon!");
+        int rollMin = currentDefinition != null ? currentDefinition.minSteal : minSteal;
+        int rollMax = currentDefinition != null ? currentDefinition.maxSteal : maxSteal;
+        int wanted = Random.Range(rollMin, rollMax + 1);
 
-        // causa na pedra o dano igual � vida ATUAL do inimigo (n�o o m�ximo sorteado):
-        // quanto mais dano o jogador j� causou nele, menos ele "rouba" ao chegar
-        if (GemObjective.Instance != null)
-            GemObjective.Instance.TakeDamage(health);
+        carriedGold = targetPile.Withdraw(wanted);
 
+        if (carriedGold > 0)
+        {
+            UpdateCarryingVisual();
+            state = State.Returning;
+            agent.SetDestination(homeSpawn.position);
+        }
+        else
+        {
+            PickNewTargetPile();
+        }
+    }
+
+    // Chegou de volta no spawn de origem carregando ouro: entrega (o ouro já saiu da pilha no
+    // momento do roubo, então "entregar" só precisa fazer o esqueleto sumir de campo).
+    void OnReachSpawn()
+    {
         GameAudio.Instance?.PlayEnemyReachedObjective(transform.position);
-
         ReturnToPool();
     }
 
@@ -286,12 +345,33 @@ public class EnemyAI : MonoBehaviour, IPoolable
         {
             GameStateManager.Instance?.RegisterEnemyDefeated();
             GameAudio.Instance?.PlayEnemyDeath(transform.position);
+
+            if (carriedGold > 0)
+                SpawnDroppedGold();
+
             ReturnToPool();
         }
         else
         {
             GameAudio.Instance?.PlayEnemyHit(transform.position);
         }
+    }
+
+    // Morreu carregando um roubo (state == Returning): larga o ouro no chão em vez de sumir com
+    // ele (GDD 2, seção 4 — o drop tem sua própria janela de prioridade/timer, ver DroppedGold).
+    void SpawnDroppedGold()
+    {
+        if (droppedGoldPrefab == null)
+        {
+            Debug.LogWarning($"{name} morreu carregando {carriedGold} de ouro mas não tem 'Dropped Gold Prefab' atribuído no Inspector — ouro perdido sem dropar.");
+            return;
+        }
+
+        GameObject drop = ObjectPoolManager.Instance.Get(droppedGoldPrefab, transform.position, Quaternion.identity);
+        DroppedGold droppedGold = drop.GetComponent<DroppedGold>();
+        droppedGold?.Setup(carriedGold, targetPile);
+
+        carriedGold = 0;
     }
 
     void FlashRed()
@@ -309,8 +389,18 @@ public class EnemyAI : MonoBehaviour, IPoolable
 
         yield return new WaitForSeconds(hitFlashDuration);
 
+        UpdateCarryingVisual();
+    }
+
+    // Placeholder de "tá carregando ouro" (GDD 2, pendência #7 — ainda não fechada): tinge o
+    // modelo inteiro de amarelo/dourado enquanto carriedGold > 0. Também serve como o estado de
+    // "cor de repouso" pro FlashRoutine restaurar depois do flash de dano.
+    void UpdateCarryingVisual()
+    {
+        if (renderers == null) return;
+
         for (int i = 0; i < renderers.Length; i++)
-            renderers[i].material.color = originalColors[i];
+            renderers[i].material.color = carriedGold > 0 ? carryingTintColor : originalColors[i];
     }
 
     // ---------- ZONAS: consulta usada pela bomba ----------

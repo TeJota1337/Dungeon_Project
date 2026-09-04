@@ -105,7 +105,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7825a966986d6784e86b28e20fa313a8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
-  objective: {fileID: 0}
+  minSteal: 10
+  maxSteal: 25
+  droppedGoldPrefab: {fileID: 781526971355809871, guid: 78e4a91b340c7cd41964925c675ac294, type: 3}
+  carryingTintColor: {r: 1, g: 0.85, b: 0.2, a: 1}
   minHealth: 10
   maxHealth: 15
   hitFlashColor: {r: 1, g: 0, b: 0, a: 1}

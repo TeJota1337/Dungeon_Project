@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c5e82b618bd5e324cacb420ddc0b3e7f, type: 3}
+  m_Name: Dinamite
+  m_EditorClassIdentifier: Assembly-CSharp::ItemDefinition
+  itemName: Dinamite
+  icon: {fileID: 0}
+  description: A bomb.
+  variants:
+  - prefab: {fileID: 3058811670986951373, guid: 37ffd44799247d640a8875a938a6258c, type: 3}
+    chancePercent: 100
+    previousPercent: 100
+  unlimitedStock: 0
+  cost: 8
+  stockPerPurchase: 10

@@ -50,24 +50,13 @@ public class GameStateManager : MonoBehaviour
     public void TriggerDefeat()
     {
         GameAudio.Instance?.PlayDefeatSting();
-        EndGame(false, "Defeat!\nThe relic was destroyed.");
+        EndGame(false, "Defeat!\nThe dungeon's gold was stolen.");
     }
 
     public void TriggerVictory()
     {
         GameAudio.Instance?.PlayVictorySting();
-        EndGame(true, "Victory!\nYou protected the relic.");
-    }
-
-    // Chamado quando o SpawnManager termina as waves E sempre que um inimigo é
-    // devolvido ao pool: vitória só conta quando as duas condições forem verdadeiras.
-    public void CheckVictoryCondition()
-    {
-        if (gameEnded) return;
-        if (spawnManager == null || !spawnManager.HasFinishedSpawning) return;
-        if (EnemyAI.ActiveCount > 0) return;
-
-        TriggerVictory();
+        EndGame(true, "Victory!\nThe dungeon's gold is safe.");
     }
 
     void EndGame(bool victory, string message)
@@ -99,7 +88,8 @@ public class GameStateManager : MonoBehaviour
         {
             if (victory)
             {
-                int points = GemObjective.Instance != null ? GemObjective.Instance.CurrentHealth : 0;
+                // pontos = ouro que sobrou na dungeon no momento da vitória (GDD 2, pendência #13)
+                int points = DungeonGoldManager.Instance != null ? DungeonGoldManager.Instance.TotalGold : 0;
                 gameOverUI.ShowVictory(message, points, EnemiesDefeated, TotalDamageDealt);
             }
             else

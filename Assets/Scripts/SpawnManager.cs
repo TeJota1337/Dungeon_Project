@@ -1,35 +1,47 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+
+// Um tipo de inimigo + quantos dessa wave são desse tipo. Uma WaveConfig soma várias dessas
+// entradas ("6 do tipo1 + 4 do tipo2") e embaralha a ordem de spawn entre elas, pra não sair
+// em blocos separados por tipo.
+[System.Serializable]
+public class WaveEnemyEntry
+{
+    public EnemyDefinition enemyType;
+    public int count = 1;
+}
+
+// Uma wave: quais tipos (e quantos de cada), de quais spawn points, e o ritmo entre spawns
+// dentro dela. Tudo pelo Inspector - arraste os EnemyDefinition e os spawn points direto aqui.
+[System.Serializable]
+public class WaveConfig
+{
+    public string waveName = "Wave";
+    public WaveEnemyEntry[] enemies;
+    [Tooltip("De quais pontos os inimigos desta wave podem nascer.")]
+    public Transform[] spawnPoints;
+    public float spawnInterval = 2f;
+    [Tooltip("Variação (pra mais ou pra menos) aplicada sobre o Spawn Interval a cada spawn, pra não cair sempre no mesmo ritmo.")]
+    public float spawnIntervalVariation = 0.5f;
+}
 
 public class SpawnManager : MonoBehaviour
 {
     public static SpawnManager Instance { get; private set; }
 
     public GameObject enemyPrefab;
-    [Tooltip("Tipos de inimigo sorteados a cada spawn (peso relativo em EnemyDefinition.spawnWeight). Deixe vazio pra usar os valores padrão do prefab.")]
-    public EnemyDefinition[] enemyDefinitions;
-    public Transform[] spawnPoints;
-    public Transform objective;
-    public float spawnInterval = 2f;
-    [Tooltip("Variação (pra mais ou pra menos) aplicada sobre o Spawn Interval a cada spawn, pra não cair sempre no mesmo ritmo.")]
-    public float spawnIntervalVariation = 0.5f;
-    public float gameDuration = 120f;
 
-    private float startTime;
+    [Tooltip("As waves da run, em ordem. A run termina em vitória ao completar a última (GDD 2, seção 2).")]
+    public WaveConfig[] waves;
 
-    // ---------- TIMER: funções pra UI (world space canvas fica por sua conta) ----------
+    [Tooltip("Pausa entre uma wave ficar limpa (sem inimigos) e a próxima começar. Futuramente é aqui que a loja do goblin abre (GDD 2, seção 9) - por enquanto é só um respiro fixo.")]
+    public float timeBetweenWaves = 5f;
 
-    public float TimeElapsed => Time.time - startTime;
-    public float TimeRemaining => Mathf.Max(0f, gameDuration - TimeElapsed);
-    public bool HasFinishedSpawning => TimeElapsed >= gameDuration;
-
-    public string GetFormattedTimeRemaining()
-    {
-        float remaining = TimeRemaining;
-        int minutes = Mathf.FloorToInt(remaining / 60f);
-        int seconds = Mathf.FloorToInt(remaining % 60f);
-        return $"{minutes:00}:{seconds:00}";
-    }
+    // -1 = ainda não começou nenhuma wave. Exposto pra UI (ex: "Wave 3/18").
+    public int CurrentWaveIndex { get; private set; } = -1;
+    public int TotalWaves => waves != null ? waves.Length : 0;
+    public bool HasFinishedAllWaves { get; private set; }
 
     void Awake()
     {
@@ -44,24 +56,67 @@ public class SpawnManager : MonoBehaviour
     // Chamado pelo StartMenuUI quando o jogador clica "Iniciar" - não começa mais sozinho no Start().
     public void BeginGame()
     {
-        startTime = Time.time;
-        StartCoroutine(SpawnRoutine());
+        StartCoroutine(RunWaves());
     }
 
-    IEnumerator SpawnRoutine()
+    IEnumerator RunWaves()
     {
-        while (TimeElapsed < gameDuration)
+        for (int i = 0; i < waves.Length; i++)
         {
-            SpawnEnemy();
+            CurrentWaveIndex = i;
+            yield return StartCoroutine(RunWave(waves[i]));
 
-            float interval = Mathf.Max(0.1f, spawnInterval + Random.Range(-spawnIntervalVariation, spawnIntervalVariation));
+            // espera o campo ficar vazio antes de considerar a wave "limpa" - só então
+            // decide se acabou a run (última wave) ou libera a próxima
+            yield return new WaitUntil(() => EnemyAI.ActiveCount == 0);
+
+            bool isLastWave = i == waves.Length - 1;
+            if (isLastWave)
+            {
+                HasFinishedAllWaves = true;
+                GameStateManager.Instance?.TriggerVictory();
+                yield break;
+            }
+
+            yield return new WaitForSeconds(timeBetweenWaves);
+        }
+    }
+
+    IEnumerator RunWave(WaveConfig wave)
+    {
+        List<EnemyDefinition> spawnList = BuildSpawnList(wave);
+
+        foreach (EnemyDefinition definition in spawnList)
+        {
+            SpawnEnemy(wave, definition);
+
+            float interval = Mathf.Max(0.1f, wave.spawnInterval + Random.Range(-wave.spawnIntervalVariation, wave.spawnIntervalVariation));
             yield return new WaitForSeconds(interval);
         }
+    }
 
-        // n�o dispara vit�ria direto: spawns acabaram, mas os inimigos que ainda
-        // est�o na cena precisam ser derrotados primeiro
-        if (GameStateManager.Instance != null)
-            GameStateManager.Instance.CheckVictoryCondition();
+    // Achata "N entradas de (tipo, quantidade)" numa lista só e embaralha - assim a wave spawna
+    // os tipos misturados entre si, em vez de um bloco inteiro de cada tipo em sequência.
+    List<EnemyDefinition> BuildSpawnList(WaveConfig wave)
+    {
+        var list = new List<EnemyDefinition>();
+
+        if (wave.enemies != null)
+        {
+            foreach (var entry in wave.enemies)
+            {
+                for (int i = 0; i < entry.count; i++)
+                    list.Add(entry.enemyType);
+            }
+        }
+
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (list[i], list[j]) = (list[j], list[i]);
+        }
+
+        return list;
     }
 
     // Chamado pelo GameStateManager ao terminar o jogo. Setar enabled=false NÃO para uma
@@ -71,35 +126,18 @@ public class SpawnManager : MonoBehaviour
         StopAllCoroutines();
     }
 
-    void SpawnEnemy()
+    void SpawnEnemy(WaveConfig wave, EnemyDefinition definition)
     {
-        Transform point = spawnPoints[Random.Range(0, spawnPoints.Length)];
+        if (wave.spawnPoints == null || wave.spawnPoints.Length == 0)
+        {
+            Debug.LogWarning($"SpawnManager: a wave '{wave.waveName}' não tem nenhum Spawn Point configurado - pulei esse spawn.");
+            return;
+        }
+
+        Transform point = wave.spawnPoints[Random.Range(0, wave.spawnPoints.Length)];
         GameObject enemy = ObjectPoolManager.Instance.Get(enemyPrefab, point.position, point.rotation);
 
         EnemyAI ai = enemy.GetComponent<EnemyAI>();
-        ai.Init(objective, PickDefinition());
-    }
-
-    // Sorteio ponderado por EnemyDefinition.spawnWeight (peso 1 = padrão; maior spawna mais).
-    EnemyDefinition PickDefinition()
-    {
-        if (enemyDefinitions == null || enemyDefinitions.Length == 0) return null;
-
-        float totalWeight = 0f;
-        foreach (var def in enemyDefinitions)
-            totalWeight += Mathf.Max(0f, def.spawnWeight);
-
-        if (totalWeight <= 0f) return enemyDefinitions[Random.Range(0, enemyDefinitions.Length)];
-
-        float roll = Random.Range(0f, totalWeight);
-        float cumulative = 0f;
-
-        foreach (var def in enemyDefinitions)
-        {
-            cumulative += Mathf.Max(0f, def.spawnWeight);
-            if (roll <= cumulative) return def;
-        }
-
-        return enemyDefinitions[enemyDefinitions.Length - 1];
+        ai.Init(point, definition); // point = spawn de origem, pra onde o esqueleto volta depois de roubar
     }
 }

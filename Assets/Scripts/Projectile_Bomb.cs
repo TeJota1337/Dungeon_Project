@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class Projectile_Bomb : MonoBehaviour, IPoolable
+public class Projectile_Bomb : MonoBehaviour, IPoolable, IThrowable
 {
     [Header("Timing")]
     public float destroyAfterSeconds = 5f;
@@ -10,6 +10,9 @@ public class Projectile_Bomb : MonoBehaviour, IPoolable
     public int maxDamage = 15;
 
     [Header("Bomba Gigante")]
+    [Tooltip("Chance de QUALQUER lançamento virar gigante - sorteada pela própria bomba a cada spawn (antes ficava no SlingshotController, mas isso é comportamento específico de bomba, não do estilingue).")]
+    [Range(0f, 1f)]
+    public float giantChance = 0.05f;
     [SerializeField] private bool isGiantSerialized = false;
     public float giantScaleMultiplier = 3f;
     public float giantDamageMultiplier = 2.5f;
@@ -57,9 +60,8 @@ public class Projectile_Bomb : MonoBehaviour, IPoolable
     {
         hasExploded = false;
 
-        // desfaz qualquer estado deixado pelo uso anterior (ex: escala de bomba gigante);
-        // o setter de isGiant já restaura a escala base
-        isGiant = false;
+        // sorteia se ESSE lançamento é gigante (o setter de isGiant já aplica a escala certa)
+        isGiant = Random.value < giantChance;
 
         if (bombCollider != null)
             bombCollider.enabled = true;

@@ -30,6 +30,11 @@ public class EnemyDefinition : ScriptableObject
     [Tooltip("Peso relativo desse tipo no sorteio do SpawnManager. Maior = spawna mais vezes. 1 = peso padrão.")]
     public float spawnWeight = 1f;
 
+    [Header("Roubo (GDD 2 — expansão roguelite)")]
+    [Tooltip("Quanto esse tipo rouba de uma GoldPile por vez, sorteado a cada spawn.")]
+    public int minSteal = 10;
+    public int maxSteal = 25;
+
     // Dispara quando algum campo muda no Inspector, pra qualquer EnemyAI que esteja usando
     // este asset como "Preview Definition" recalcular as zonas na hora, sem precisar dar Play.
     public event System.Action Changed;

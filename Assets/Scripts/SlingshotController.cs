@@ -1,27 +1,12 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[System.Serializable]
-public class BombOption
-{
-    public GameObject prefab;
-
-    [Range(0f, 100f)]
-    public float chancePercent = 50f;
-
-    [HideInInspector] public float previousPercent;
-}
-
 public class SlingshotController : MonoBehaviour
 {
     [Header("Referências dos controles")]
     public Transform leftHandTransform;   // mão que segura o estilingue
     public Transform rightHandTransform;  // mão que puxa/lança
-    public Transform bombSpawnPoint;      // ponto visual de onde a bomba nasce/mira
-
-    [Header("Bomba Gigante")]
-    [Range(0f, 1f)]
-    public float giantBombChance = 0.05f;
+    public Transform bombSpawnPoint;      // ponto visual de onde o projétil nasce/mira
 
     [Header("Colisão a ignorar (corpo do jogador)")]
     public Collider[] playerColliders;
@@ -35,8 +20,6 @@ public class SlingshotController : MonoBehaviour
 
     [Header("Prefabs")]
     public GameObject slingshotPrefab;
-    [Tooltip("Prefabs de bomba possíveis, cada um com sua chance (%) de ser sorteado a cada disparo - a soma sempre fica em 100%.")]
-    public BombOption[] bombOptions;
 
     [Header("Trajetória")]
     public LineRenderer trajectoryLine;
@@ -82,7 +65,7 @@ public class SlingshotController : MonoBehaviour
 
     // --- estado interno ---
     private GameObject currentSlingshot;
-    private GameObject currentBomb;
+    private GameObject currentProjectile;
 
     private Transform slingshotTrecoTransform;
     private SlingshotPouch slingshotPouch;
@@ -153,12 +136,12 @@ public class SlingshotController : MonoBehaviour
 
     void OnDestroy()
     {
-        // evita vazar uma bomba presa no pool se o componente for destruído no meio de uma mira.
-        if (currentBomb == null) return;
+        // evita vazar um projétil preso no pool se o componente for destruído no meio de uma mira.
+        if (currentProjectile == null) return;
 
-        PooledObject pooledBomb = currentBomb.GetComponent<PooledObject>();
-        if (pooledBomb != null) pooledBomb.ReturnToPool();
-        else Destroy(currentBomb);
+        PooledObject pooledProjectile = currentProjectile.GetComponent<PooledObject>();
+        if (pooledProjectile != null) pooledProjectile.ReturnToPool();
+        else Destroy(currentProjectile);
     }
 
     // ---------- ESTILINGUE (sempre visível, preso na mão esquerda) ----------
@@ -277,55 +260,46 @@ public class SlingshotController : MonoBehaviour
         return null;
     }
 
-    // ---------- BOMBA (mão direita — trigger ou grip, o que estiver conectado) ----------
+    // ---------- LANÇAMENTO (mão direita — trigger ou grip, o que estiver conectado) ----------
+    // Lança o item atualmente equipado no PlayerInventory (GDD 2, seção 6-7) - não sabe mais
+    // nada específico de "bomba", qualquer prefab que implemente IThrowable serve.
 
     void OnBombPressed(InputAction.CallbackContext ctx)
     {
         if (currentSlingshot == null || !isRightHandInZone || isAiming) return;
+        if (PlayerInventory.Instance == null) return;
+
+        ItemDefinition equipped = PlayerInventory.Instance.EquippedItem;
+        if (equipped == null) return;
+
+        GameObject prefab = equipped.PickPrefab();
+        if (prefab == null) return;
+
+        if (!PlayerInventory.Instance.TryConsumeEquipped()) return; // sem estoque desse item
 
         activeBombAction = ctx.action;
 
-        currentBomb = ObjectPoolManager.Instance.Get(PickBombPrefab(), bombSpawnPoint.position, Quaternion.identity);
+        currentProjectile = ObjectPoolManager.Instance.Get(prefab, bombSpawnPoint.position, Quaternion.identity);
 
-        Projectile_Bomb bombScript = currentBomb.GetComponent<Projectile_Bomb>();
-        if (bombScript != null)
+        IThrowable throwable = currentProjectile.GetComponent<IThrowable>();
+        if (throwable != null)
         {
-            if (Random.value < giantBombChance)
-            {
-                bombScript.isGiant = true;
-            }
-
-            bombScript.IgnoreCollisionsWith(playerColliders); // registra primeiro, com collider ativo
-            bombScript.SetCollisionEnabled(false);              // só então desativa
+            throwable.IgnoreCollisionsWith(playerColliders); // registra primeiro, com collider ativo
+            throwable.SetCollisionEnabled(false);              // só então desativa
         }
 
-        Rigidbody rb = currentBomb.GetComponent<Rigidbody>();
+        Rigidbody rb = currentProjectile.GetComponent<Rigidbody>();
         rb.isKinematic = true;
 
         isAiming = true;
         trajectoryLine.enabled = true;
     }
 
-    // Sorteio ponderado pelo Chance Percent de cada BombOption (que o OnValidate mantém somando 100%).
-    GameObject PickBombPrefab()
-    {
-        float roll = Random.Range(0f, 100f);
-        float cumulative = 0f;
-
-        foreach (var option in bombOptions)
-        {
-            cumulative += option.chancePercent;
-            if (roll <= cumulative) return option.prefab;
-        }
-
-        return bombOptions[bombOptions.Length - 1].prefab;
-    }
-
     void OnBombReleased(InputAction.CallbackContext ctx)
     {
         // só a mesma ação que iniciou a mira pode terminá-la — evita soltar com o grip
         // uma mira que começou pelo trigger (ou vice-versa) enquanto os dois estão testados juntos.
-        if (!isAiming || currentBomb == null || ctx.action != activeBombAction) return;
+        if (!isAiming || currentProjectile == null || ctx.action != activeBombAction) return;
 
         LaunchBomb();
         isAiming = false;
@@ -354,13 +328,13 @@ public class SlingshotController : MonoBehaviour
 
         Vector3 launchVelocity = GetLaunchVelocity();
 
-        Projectile_Bomb bombScript = currentBomb.GetComponent<Projectile_Bomb>();
-        if (bombScript != null)
+        IThrowable throwable = currentProjectile.GetComponent<IThrowable>();
+        if (throwable != null)
         {
-            bombScript.SetCollisionEnabled(true);
+            throwable.SetCollisionEnabled(true);
         }
 
-        Rigidbody rb = currentBomb.GetComponent<Rigidbody>();
+        Rigidbody rb = currentProjectile.GetComponent<Rigidbody>();
         rb.isKinematic = false;
         rb.linearVelocity = launchVelocity;
 
@@ -379,26 +353,26 @@ public class SlingshotController : MonoBehaviour
 
         rb.angularVelocity = randomAxis * (spinAmount * Mathf.Deg2Rad);
 
-        currentBomb = null;
+        currentProjectile = null;
     }
 
     void BreakSlingshot()
     {
-        Debug.Log("O estilingue arrebentou! A bomba caiu sem força.");
+        Debug.Log("O estilingue arrebentou! O projétil caiu sem força.");
 
-        Rigidbody rb = currentBomb.GetComponent<Rigidbody>();
+        Rigidbody rb = currentProjectile.GetComponent<Rigidbody>();
         rb.isKinematic = false;
 
-        Projectile_Bomb bombScript = currentBomb.GetComponent<Projectile_Bomb>();
-        if (bombScript != null)
+        IThrowable throwable = currentProjectile.GetComponent<IThrowable>();
+        if (throwable != null)
         {
-            bombScript.SetCollisionEnabled(true);
+            throwable.SetCollisionEnabled(true);
         }
 
         PlayerHaptics.Instance?.Break();
         GameAudio.Instance?.PlaySlingshotBreak(currentSlingshot != null ? currentSlingshot.transform.position : transform.position);
 
-        currentBomb = null;
+        currentProjectile = null;
     }
 
     // ---------- CÁLCULO DE FORÇA/DIREÇÃO ----------
@@ -450,9 +424,9 @@ public class SlingshotController : MonoBehaviour
             UpdateElasticForceColor(pullForce);
         }
 
-        if (isAiming && currentBomb != null)
+        if (isAiming && currentProjectile != null)
         {
-            currentBomb.transform.position = bombSpawnPoint.position;
+            currentProjectile.transform.position = bombSpawnPoint.position;
 
             Vector3 launchVelocity = GetLaunchVelocity();
             DrawTrajectory(bombSpawnPoint.position, launchVelocity);
@@ -550,80 +524,6 @@ public class SlingshotController : MonoBehaviour
 
         trajectoryLine.positionCount = count;
         trajectoryLine.SetPositions(trajectoryPoints);
-    }
-
-    // ---------- BOMB OPTIONS: mexer numa chance redistribui o resto pra soma ficar sempre em 100% ----------
-
-    void OnValidate()
-    {
-        if (bombOptions == null || bombOptions.Length == 0) return;
-
-        float prevSum = 0f;
-        foreach (var b in bombOptions) prevSum += b.previousPercent;
-
-        if (prevSum < 0.001f)
-        {
-            // primeira vez (ou array recém-redimensionado): distribui igual entre todos
-            float equalShare = 100f / bombOptions.Length;
-            foreach (var b in bombOptions)
-            {
-                b.chancePercent = equalShare;
-                b.previousPercent = equalShare;
-            }
-        }
-        else
-        {
-            int changedIndex = -1;
-            float delta = 0f;
-
-            for (int i = 0; i < bombOptions.Length; i++)
-            {
-                float diff = bombOptions[i].chancePercent - bombOptions[i].previousPercent;
-                if (Mathf.Abs(diff) > 0.0001f)
-                {
-                    changedIndex = i;
-                    delta = diff;
-                    break;
-                }
-            }
-
-            if (changedIndex >= 0)
-                RedistributeBombChance(changedIndex, delta);
-
-            for (int i = 0; i < bombOptions.Length; i++)
-                bombOptions[i].previousPercent = bombOptions[i].chancePercent;
-        }
-    }
-
-    void RedistributeBombChance(int changedIndex, float delta)
-    {
-        float othersSum = 0f;
-        for (int i = 0; i < bombOptions.Length; i++)
-            if (i != changedIndex) othersSum += bombOptions[i].previousPercent;
-
-        if (othersSum <= 0.0001f)
-        {
-            bombOptions[changedIndex].chancePercent = bombOptions[changedIndex].previousPercent;
-            return;
-        }
-
-        float remainingDelta = -delta;
-        for (int i = 0; i < bombOptions.Length; i++)
-        {
-            if (i == changedIndex) continue;
-            float proportion = bombOptions[i].previousPercent / othersSum;
-            bombOptions[i].chancePercent = Mathf.Clamp(bombOptions[i].previousPercent + remainingDelta * proportion, 0f, 100f);
-        }
-
-        bombOptions[changedIndex].chancePercent = Mathf.Clamp(bombOptions[changedIndex].chancePercent, 0f, 100f);
-
-        float sum = 0f;
-        foreach (var b in bombOptions) sum += b.chancePercent;
-        if (sum > 0.0001f)
-        {
-            for (int i = 0; i < bombOptions.Length; i++)
-                bombOptions[i].chancePercent = bombOptions[i].chancePercent / sum * 100f;
-        }
     }
 
     void OnDrawGizmos()

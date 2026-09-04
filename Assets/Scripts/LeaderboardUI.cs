@@ -38,6 +38,14 @@ public class LeaderboardUI : MonoBehaviour
         return column != null ? column.GetComponentsInChildren<TextMeshProUGUI>(true) : new TextMeshProUGUI[0];
     }
 
+    // Chamado pelo botão de reset no CanvasScore via OnClick() - apaga o ranking salvo
+    // (PlayerPrefs) e já atualiza as colunas na hora, sem precisar recarregar a cena.
+    public void ResetLeaderboard()
+    {
+        Leaderboard.Clear();
+        Refresh(Leaderboard.Load());
+    }
+
     // entries já deve vir ordenado (maior Pontos primeiro) - ex.: Leaderboard.Load()/AddEntry().
     public void Refresh(List<LeaderboardEntry> entries)
     {

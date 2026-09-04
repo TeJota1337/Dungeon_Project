@@ -12,6 +12,8 @@ public class ShopUpgradeSlotUI : MonoBehaviour
     public TextMeshProUGUI descriptionText;
     public TextMeshProUGUI costText;
     public Image rarityBackground;
+    [Tooltip("Selo extra colorido pela raridade, além do fundo do card (opcional).")]
+    public Image rarityBadge;
     public Button buyButton;
 
     private UpgradeDefinition currentUpgrade;
@@ -29,12 +31,22 @@ public class ShopUpgradeSlotUI : MonoBehaviour
         if (descriptionText != null) descriptionText.text = upgrade.description;
         if (costText != null) costText.text = upgrade.cost.ToString();
 
-        if (rarityBackground == null)
-            Debug.LogWarning($"{name}: 'Rarity Background' não está atribuído no Inspector - a cor da raridade não vai aparecer.");
-        else if (palette == null)
+        if (palette == null)
+        {
             Debug.LogWarning("ShopManager: 'Palette' não está atribuído no Inspector - a cor da raridade não vai aparecer.");
+        }
         else
-            rarityBackground.color = palette.GetColor(upgrade.rarity);
+        {
+            Color rarityColor = palette.GetColor(upgrade.rarity);
+
+            if (rarityBackground == null)
+                Debug.LogWarning($"{name}: 'Rarity Background' não está atribuído no Inspector - a cor da raridade não vai aparecer no fundo do card.");
+            else
+                rarityBackground.color = rarityColor;
+
+            if (rarityBadge != null)
+                rarityBadge.color = rarityColor;
+        }
 
         RefreshAffordability();
     }

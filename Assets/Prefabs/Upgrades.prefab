@@ -470,7 +470,8 @@ MonoBehaviour:
   nameText: {fileID: 2082007491383652382}
   descriptionText: {fileID: 3296741535509524176}
   costText: {fileID: 3545246134962292907}
-  rarityBackground: {fileID: 8912285256171842617}
+  rarityBackground: {fileID: 578467254384151959}
+  rarityBadge: {fileID: 578467254384151959}
   buyButton: {fileID: 1576989116976563232}
 --- !u!1 &3201643707151975978
 GameObject:

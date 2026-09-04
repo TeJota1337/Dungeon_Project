@@ -269,6 +269,13 @@ public class SlingshotController : MonoBehaviour
         if (currentSlingshot == null || !isRightHandInZone || isAiming) return;
         if (PlayerInventory.Instance == null) return;
 
+        // duas maneiras de atirar, cada uma decide o que equipar antes de começar a mira:
+        // grip cicla entre os itens comprados, trigger sempre volta pro hit básico (pedra).
+        if (rightGripAction != null && ctx.action == rightGripAction.action)
+            PlayerInventory.Instance.CycleToNextPurchased();
+        else if (rightTriggerAction != null && ctx.action == rightTriggerAction.action)
+            PlayerInventory.Instance.EquipDefault();
+
         ItemDefinition equipped = PlayerInventory.Instance.EquippedItem;
         if (equipped == null) return;
 
@@ -284,6 +291,7 @@ public class SlingshotController : MonoBehaviour
         IThrowable throwable = currentProjectile.GetComponent<IThrowable>();
         if (throwable != null)
         {
+            throwable.SetSourceItem(equipped); // pra upgrades de dano (loja) saberem qual item bonificar
             throwable.IgnoreCollisionsWith(playerColliders); // registra primeiro, com collider ativo
             throwable.SetCollisionEnabled(false);              // só então desativa
         }

@@ -32,6 +32,10 @@ public class EnemyAI : MonoBehaviour, IPoolable
     public int minSteal = 10;
     public int maxSteal = 25;
 
+    [Header("Recompensa (fallback se Init() não vier de um EnemyDefinition)")]
+    public int minSkullReward = 1;
+    public int maxSkullReward = 2;
+
     [Header("Ouro dropado ao morrer carregando um roubo")]
     public GameObject droppedGoldPrefab;
 
@@ -327,6 +331,8 @@ public class EnemyAI : MonoBehaviour, IPoolable
 
     public void TakeDamage(int amount, bool isCrit = false, Color? hitColor = null)
     {
+        if (health <= 0) return; // já morreu neste ciclo - evita processar 2 mortes (2 projéteis acertando no mesmo frame)
+
         health -= amount;
         GameStateManager.Instance?.RegisterDamage(amount);
 #if UNITY_EDITOR
@@ -346,6 +352,8 @@ public class EnemyAI : MonoBehaviour, IPoolable
             GameStateManager.Instance?.RegisterEnemyDefeated();
             GameAudio.Instance?.PlayEnemyDeath(transform.position);
 
+            AwardSkullReward();
+
             if (carriedGold > 0)
                 SpawnDroppedGold();
 
@@ -355,6 +363,16 @@ public class EnemyAI : MonoBehaviour, IPoolable
         {
             GameAudio.Instance?.PlayEnemyHit(transform.position);
         }
+    }
+
+    // Cabeças de esqueleto (moeda do jogador pra loja - GDD 2, seção 3) - dropa ao morrer,
+    // independente de estar ou não carregando ouro roubado no momento.
+    void AwardSkullReward()
+    {
+        int rollMin = currentDefinition != null ? currentDefinition.minSkullReward : minSkullReward;
+        int rollMax = currentDefinition != null ? currentDefinition.maxSkullReward : maxSkullReward;
+
+        PlayerCurrency.Instance?.Add(Random.Range(rollMin, rollMax + 1));
     }
 
     // Morreu carregando um roubo (state == Returning): larga o ouro no chão em vez de sumir com

@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1eee1c35eb4e6f64bb0399dc4650b4a3, type: 3}
+  m_Name: RarityPalette
+  m_EditorClassIdentifier: Assembly-CSharp::RarityPalette
+  colors:
+  - rarity: 0
+    color: {r: 0.75, g: 0.75, b: 0.75, a: 1}
+  - rarity: 1
+    color: {r: 0.3, g: 0.85, b: 0.3, a: 1}
+  - rarity: 2
+    color: {r: 0.3, g: 0.55, b: 1, a: 1}
+  - rarity: 3
+    color: {r: 0.65, g: 0.3, b: 0.9, a: 1}
+  - rarity: 4
+    color: {r: 1, g: 0.6, b: 0.1, a: 1}
+  - rarity: 5
+    color: {r: 1, g: 0.2, b: 0.35, a: 1}

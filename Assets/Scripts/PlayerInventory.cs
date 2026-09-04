@@ -23,6 +23,12 @@ public class PlayerInventory : MonoBehaviour
 
     private readonly Dictionary<ItemDefinition, int> stock = new Dictionary<ItemDefinition, int>();
 
+    // Ordem em que os itens comprados (não ilimitados) foram adquiridos pela primeira vez -
+    // usada pelo ciclo do grip (SlingshotController), pra sempre andar na mesma ordem
+    // (Dictionary não garante ordem nenhuma).
+    private readonly List<ItemDefinition> purchasedOrder = new List<ItemDefinition>();
+    private int cycleIndex = -1;
+
     void Awake()
     {
         Instance = this;
@@ -38,10 +44,13 @@ public class PlayerInventory : MonoBehaviour
         }
     }
 
-    // Chamado pela loja (quando existir) ao comprar um item.
+    // Chamado pela loja ao comprar um item.
     public void AddStock(ItemDefinition item, int amount)
     {
         if (item == null || amount <= 0) return;
+
+        if (!item.unlimitedStock && !purchasedOrder.Contains(item))
+            purchasedOrder.Add(item);
 
         stock[item] = GetStock(item) + amount;
     }
@@ -62,6 +71,34 @@ public class PlayerInventory : MonoBehaviour
         if (GetStock(item) <= 0) return;
 
         EquippedItem = item;
+    }
+
+    // Chamado pelo SlingshotController ao apertar o GRIP - avança pro próximo item comprado
+    // (não a pedra), ciclando na ordem de compra. Pula itens sem estoque; se nenhum comprado
+    // tiver estoque, não muda nada (mantém o que já estava equipado).
+    public void CycleToNextPurchased()
+    {
+        if (purchasedOrder.Count == 0) return;
+
+        for (int i = 0; i < purchasedOrder.Count; i++)
+        {
+            cycleIndex = (cycleIndex + 1) % purchasedOrder.Count;
+            ItemDefinition candidate = purchasedOrder[cycleIndex];
+
+            if (GetStock(candidate) > 0)
+            {
+                EquipItem(candidate);
+                return;
+            }
+        }
+    }
+
+    // Chamado pelo SlingshotController ao apertar o TRIGGER - sempre volta pro item padrão
+    // (pedra/hit básico), independente de qual item comprado estava equipado pelo ciclo do grip.
+    public void EquipDefault()
+    {
+        if (defaultItem != null)
+            EquipItem(defaultItem);
     }
 
     // Chamado pelo SlingshotController ao lançar. Retorna false se não sobrou estoque -

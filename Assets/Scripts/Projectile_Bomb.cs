@@ -33,6 +33,7 @@ public class Projectile_Bomb : MonoBehaviour, IPoolable, IThrowable
     private PooledObject pooledObject;
     private Vector3 baseScale;
     private bool hasExploded; // trava contra explodir duas vezes
+    private ItemDefinition sourceItem; // qual ItemDefinition lançou essa instância (upgrades de dano da loja)
 
     // setar isGiant já aplica a escala correspondente na hora, então funciona
     // independente da ordem entre "vir do pool" e "SlingshotController decidir se é gigante"
@@ -97,6 +98,11 @@ public class Projectile_Bomb : MonoBehaviour, IPoolable, IThrowable
             if (col != null)
                 Physics.IgnoreCollision(bombCollider, col, true);
         }
+    }
+
+    public void SetSourceItem(ItemDefinition item)
+    {
+        sourceItem = item;
     }
 
     void OnCollisionEnter(Collision collision)
@@ -176,6 +182,7 @@ public class Projectile_Bomb : MonoBehaviour, IPoolable, IThrowable
         bool isCrit = zone != null && zone.type == ZoneType.Critical;
 
         int baseDamage = Random.Range(minDamage, maxDamage + 1);
+        if (PlayerUpgrades.Instance != null) baseDamage += PlayerUpgrades.Instance.GetDamageBonus(sourceItem);
         if (isGiant) baseDamage = Mathf.RoundToInt(baseDamage * giantDamageMultiplier);
 
         int finalDamage = Mathf.RoundToInt(baseDamage * multiplier * extraMultiplier);

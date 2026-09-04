@@ -38,6 +38,8 @@ public class ItemDefinition : ScriptableObject
     public int cost = 10;
     [Tooltip("Quantos você recebe por compra na loja.")]
     public int stockPerPurchase = 3;
+    [Tooltip("Texto ao lado da quantidade na loja (ex: 'unidades', 'usos', 'cargas'). Deixe vazio pra mostrar só o número.")]
+    public string stockLabel = "unidades";
 
     // Sorteio ponderado pelo Chance Percent de cada variante.
     public GameObject PickPrefab()

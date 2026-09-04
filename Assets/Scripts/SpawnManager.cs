@@ -43,6 +43,10 @@ public class SpawnManager : MonoBehaviour
     public int TotalWaves => waves != null ? waves.Length : 0;
     public bool HasFinishedAllWaves { get; private set; }
 
+    // Contagem regressiva de quanto falta pra loja fechar/a próxima wave começar - exposto pra UI
+    // (ex: ShopTimerDisplay). Só é != 0 durante a pausa entre waves.
+    public float ShopTimeRemaining { get; private set; }
+
     void Awake()
     {
         Instance = this;
@@ -78,7 +82,25 @@ public class SpawnManager : MonoBehaviour
                 yield break;
             }
 
-            yield return new WaitForSeconds(timeBetweenWaves);
+            // loja abre no intervalo entre waves (GDD 2, seção 9) - upcomingWave é 1-based
+            // (CurrentWaveIndex ainda está na wave que acabou de terminar). Log explícito se
+            // não existir ShopManager na cena, pra não falhar em silêncio (Instance?. mascarava isso).
+            if (ShopManager.Instance != null)
+                ShopManager.Instance.Open(CurrentWaveIndex + 2);
+            else
+                Debug.LogWarning("SpawnManager: ShopManager.Instance é null - a loja não vai abrir. Confirme que existe um GameObject com o componente ShopManager na cena.");
+
+            // contagem regressiva manual (em vez de um WaitForSeconds só) pra ShopTimeRemaining
+            // dar pra UI mostrar o tempo restante ao vivo (ex: ShopTimerDisplay).
+            ShopTimeRemaining = timeBetweenWaves;
+            while (ShopTimeRemaining > 0f)
+            {
+                yield return null;
+                ShopTimeRemaining -= Time.deltaTime;
+            }
+            ShopTimeRemaining = 0f;
+
+            ShopManager.Instance?.Close();
         }
     }
 

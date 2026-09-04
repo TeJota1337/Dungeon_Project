@@ -35,6 +35,11 @@ public class EnemyDefinition : ScriptableObject
     public int minSteal = 10;
     public int maxSteal = 25;
 
+    [Header("Recompensa (GDD 2, seção 3 — cabeças de esqueleto)")]
+    [Tooltip("Quantas cabeças esse tipo dropa ao morrer, sorteado por morte - independe de estar ou não carregando ouro roubado.")]
+    public int minSkullReward = 1;
+    public int maxSkullReward = 2;
+
     // Dispara quando algum campo muda no Inspector, pra qualquer EnemyAI que esteja usando
     // este asset como "Preview Definition" recalcular as zonas na hora, sem precisar dar Play.
     public event System.Action Changed;

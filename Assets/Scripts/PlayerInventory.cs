@@ -21,6 +21,10 @@ public class PlayerInventory : MonoBehaviour
 
     public ItemDefinition EquippedItem { get; private set; }
 
+    // Exposto pra UI (ex: mini-canvas de inventário na mão) listar os especiais disponíveis e
+    // o estoque de cada um, na mesma ordem que o ciclo do grip percorre.
+    public IReadOnlyList<ItemDefinition> PurchasedItems => purchasedOrder;
+
     private readonly Dictionary<ItemDefinition, int> stock = new Dictionary<ItemDefinition, int>();
 
     // Ordem em que os itens comprados (não ilimitados) foram adquiridos pela primeira vez -

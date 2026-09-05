@@ -266,14 +266,26 @@ public class SlingshotController : MonoBehaviour
 
     void OnBombPressed(InputAction.CallbackContext ctx)
     {
-        if (currentSlingshot == null || !isRightHandInZone || isAiming) return;
         if (PlayerInventory.Instance == null) return;
+
+        bool isGripAction = rightGripAction != null && ctx.action == rightGripAction.action;
+        bool isTriggerAction = rightTriggerAction != null && ctx.action == rightTriggerAction.action;
+
+        // Grip apertado (já mirando) + trigger apertado = pedido de troca do projétil especial
+        // no meio da mira, sem soltar/cancelar o que já tá sendo puxado.
+        if (isAiming && isTriggerAction && rightGripAction != null && activeBombAction == rightGripAction.action)
+        {
+            CycleAimedProjectile();
+            return;
+        }
+
+        if (currentSlingshot == null || !isRightHandInZone || isAiming) return;
 
         // duas maneiras de atirar, cada uma decide o que equipar antes de começar a mira:
         // grip cicla entre os itens comprados, trigger sempre volta pro hit básico (pedra).
-        if (rightGripAction != null && ctx.action == rightGripAction.action)
+        if (isGripAction)
             PlayerInventory.Instance.CycleToNextPurchased();
-        else if (rightTriggerAction != null && ctx.action == rightTriggerAction.action)
+        else if (isTriggerAction)
             PlayerInventory.Instance.EquipDefault();
 
         ItemDefinition equipped = PlayerInventory.Instance.EquippedItem;
@@ -313,6 +325,47 @@ public class SlingshotController : MonoBehaviour
         isAiming = false;
         activeBombAction = null;
         trajectoryLine.enabled = false;
+    }
+
+    // Troca o projétil que já está na mão (grip mantido, mirando) pelo próximo item comprado,
+    // sem cancelar a mira em andamento. Devolve o estoque do item abandonado (nunca foi lançado)
+    // e consome 1 do novo - a mira/força continuam vindo do LateUpdate normalmente.
+    void CycleAimedProjectile()
+    {
+        if (currentProjectile == null) return;
+
+        ItemDefinition previousItem = PlayerInventory.Instance.EquippedItem;
+        PlayerInventory.Instance.CycleToNextPurchased();
+        ItemDefinition newItem = PlayerInventory.Instance.EquippedItem;
+        if (newItem == null || newItem == previousItem) return; // só 1 item comprado - nada muda
+
+        GameObject prefab = newItem.PickPrefab();
+        if (prefab == null) return;
+
+        if (!PlayerInventory.Instance.TryConsumeEquipped())
+        {
+            PlayerInventory.Instance.EquipItem(previousItem); // desfaz a troca, por segurança
+            return;
+        }
+
+        PlayerInventory.Instance.AddStock(previousItem, 1); // devolve o que tava na mão
+
+        PooledObject oldPooled = currentProjectile.GetComponent<PooledObject>();
+        if (oldPooled != null) oldPooled.ReturnToPool();
+        else Destroy(currentProjectile);
+
+        currentProjectile = ObjectPoolManager.Instance.Get(prefab, bombSpawnPoint.position, Quaternion.identity);
+
+        IThrowable throwable = currentProjectile.GetComponent<IThrowable>();
+        if (throwable != null)
+        {
+            throwable.SetSourceItem(newItem);
+            throwable.IgnoreCollisionsWith(playerColliders);
+            throwable.SetCollisionEnabled(false);
+        }
+
+        Rigidbody newRb = currentProjectile.GetComponent<Rigidbody>();
+        newRb.isKinematic = true;
     }
 
     void LaunchBomb()

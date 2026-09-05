@@ -13,12 +13,13 @@ MonoBehaviour:
   m_Name: Bomb
   m_EditorClassIdentifier: Assembly-CSharp::ItemDefinition
   itemName: Bomba
-  icon: {fileID: 0}
-  description: A bomb.
+  icon: {fileID: 21300000, guid: 76fe37f1a9d8ded4d9ee7c54f0d5d5d5, type: 3}
+  description: Um bomba que causa um dano ok...
   variants:
   - prefab: {fileID: 3058811670986951373, guid: ee805878de8d04a4aa910988d59d5eb5, type: 3}
     chancePercent: 100
     previousPercent: 100
   unlimitedStock: 0
-  cost: 15
+  cost: 20
   stockPerPurchase: 5
+  stockLabel: unidades

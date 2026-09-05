@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: Dinamite
   m_EditorClassIdentifier: Assembly-CSharp::ItemDefinition
   itemName: Dinamite
-  icon: {fileID: 0}
-  description: A bomb.
+  icon: {fileID: 21300000, guid: bf4c646f2deba2e449795bfb30b4f111, type: 3}
+  description: "Uma dinamite... \xC9 legal."
   variants:
   - prefab: {fileID: 3058811670986951373, guid: 37ffd44799247d640a8875a938a6258c, type: 3}
     chancePercent: 100
@@ -22,3 +22,4 @@ MonoBehaviour:
   unlimitedStock: 0
   cost: 8
   stockPerPurchase: 10
+  stockLabel: unidades

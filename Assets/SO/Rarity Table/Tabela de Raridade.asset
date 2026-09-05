@@ -14,20 +14,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ShopRarityTable
   weights:
   - rarity: 0
-    chancePercent: 40.67508
-    previousPercent: 40.67508
+    chancePercent: 24.2
+    previousPercent: 24.2
   - rarity: 1
-    chancePercent: 27.70037
-    previousPercent: 27.70037
+    chancePercent: 35.393024
+    previousPercent: 35.393024
   - rarity: 2
-    chancePercent: 17.804483
-    previousPercent: 17.804483
+    chancePercent: 22.748941
+    previousPercent: 22.748941
   - rarity: 3
-    chancePercent: 8.366032
-    previousPercent: 8.366032
+    chancePercent: 10.689353
+    previousPercent: 10.689353
   - rarity: 4
-    chancePercent: 3.9540439
-    previousPercent: 3.9540439
+    chancePercent: 5.0521197
+    previousPercent: 5.0521197
   - rarity: 5
-    chancePercent: 1.5000001
-    previousPercent: 1.5000001
+    chancePercent: 1.9165645
+    previousPercent: 1.9165645

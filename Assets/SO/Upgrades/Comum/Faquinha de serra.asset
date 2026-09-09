@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6e129958671920442a5f75465695899c, type: 3}
+  m_Name: Faquinha de serra
+  m_EditorClassIdentifier: Assembly-CSharp::UpgradeDefinition
+  upgradeName: Faquinha de serra
+  description: Aumenta em 5 o dano da adaguinha
+  cost: 12
+  rarity: 0
+  targetItem: {fileID: 11400000, guid: c5d67b5de8ef02a4b8a6fd2fffbcb369, type: 2}
+  damageBonus: 5

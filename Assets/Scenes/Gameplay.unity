@@ -609,6 +609,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: a0feea7e1e7696948b3bd747354b15b4, type: 2}
   - {fileID: 11400000, guid: a337d0a51746e7c49a98cd2c1e436305, type: 2}
   - {fileID: 11400000, guid: 83c0164d9d477424fadd398f2938159c, type: 2}
+  - {fileID: 11400000, guid: c5d67b5de8ef02a4b8a6fd2fffbcb369, type: 2}
   itemSlotPrefab: {fileID: 7526129625227337141, guid: 6228454e8f42cde44b402d615f2fbe7f, type: 3}
   itemSlotCount: 4
   itemSlotsParent: {fileID: 1310800733}
@@ -642,6 +643,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 6c5df910817f5564aa95e2fb5901255a, type: 2}
   - {fileID: 11400000, guid: 75792956c988b37448eeaf088f5afe3c, type: 2}
   - {fileID: 11400000, guid: 84e851d37a725f342b45fbe49702fca8, type: 2}
+  - {fileID: 11400000, guid: 809e539132631334fb31792c6fb2f756, type: 2}
   progression:
   - fromWave: 0
     table: {fileID: 11400000, guid: cab3f5c61f28da04b871f84dee1b83b9, type: 2}

@@ -3,10 +3,18 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-// Janela de Editor pra criar ItemDefinition/UpgradeDefinition rapidamente (GDD 2, seção 9) sem
-// passar pelo menu Create > preencher campo por campo > arrastar referência uma por uma. Abre em
-// Dungeon > Ferramenta de Conteúdo da Loja. Cada aba já salva o asset na pasta certa
-// (Assets/SO/Item Definitions ou Assets/SO/Upgrades/<Raridade>), criando a pasta se precisar.
+// Assistente guiado (wizard) de 3 etapas pra criar conteúdo da loja (GDD 2, seção 9): Projétil ->
+// Item -> Upgrade. Abre em Dungeon > Ferramenta de Conteúdo da Loja.
+//
+// Como funciona a navegação:
+//  - A "zona inteligente" no topo aceita QUALQUER coisa arrastada (modelo 3D, prefab de projétil,
+//    ItemDefinition) e detecta sozinha em qual etapa você deveria estar, pulando pra lá.
+//  - O indicador de etapas embaixo dela também é clicável - dá pra pular manualmente a qualquer
+//    momento, pra frente ou pra trás.
+//  - Depois de criar algo, a etapa mostra um aviso com botões: seguir pra próxima etapa (já com
+//    o que acabou de criar pré-preenchido) ou criar outro do mesmo tipo.
+// Cada etapa salva o asset na pasta certa (Assets/SO/Item Definitions, Assets/SO/Upgrades/<Raridade>
+// ou Assets/Prefabs), criando a pasta se precisar.
 public class ShopContentToolWindow : EditorWindow
 {
     const string ItemFolder = "Assets/SO/Item Definitions";
@@ -15,11 +23,11 @@ public class ShopContentToolWindow : EditorWindow
     const string TemplatePrefabPath = "Assets/Prefabs/Projectile_Bomb.prefab";
     const string IconFolder = "Assets/SO/Item Definitions/Icons";
 
-    int tab;
-    readonly string[] tabs = { "Itens", "Upgrades", "Projétil" };
+    enum Step { Projectile, Item, Upgrade }
+    Step currentStep = Step.Projectile;
     Vector2 scroll;
 
-    // --- aba Itens ---
+    // --- etapa Item ---
     GameObject itemPrefab;
     string itemName = "";
     string itemDescription = "";
@@ -28,18 +36,22 @@ public class ShopContentToolWindow : EditorWindow
     int itemCost = 10;
     int itemStockPerPurchase = 3;
     string itemStockLabel = "unidades";
+    bool itemCreated;
+    ItemDefinition lastItem;
 
-    // --- aba Upgrades ---
+    // --- etapa Upgrade ---
     string upgradeName = "";
     string upgradeDescription = "";
     ItemRarity upgradeRarity = ItemRarity.Comum;
     int upgradeTargetIndex;
     int upgradeDamageBonus = 5;
     int upgradeCost = 15;
+    bool upgradeCreated;
+    string lastUpgradeName;
 
     ItemDefinition[] cachedItems;
 
-    // --- aba Projétil ---
+    // --- etapa Projétil ---
     GameObject projModel;
     string projName = "";
     float projScale = 1f;
@@ -51,6 +63,8 @@ public class ShopContentToolWindow : EditorWindow
     GameObject projExplosionPrefab;
     float projExplosionScaleMultiplier = 1f;
     bool projTemplateLoaded;
+    bool projectileCreated;
+    string lastProjectileName;
 
     [MenuItem("Dungeon/Ferramenta de Conteúdo da Loja")]
     static void Open()
@@ -74,208 +88,107 @@ public class ShopContentToolWindow : EditorWindow
 
     void OnGUI()
     {
-        tab = GUILayout.Toolbar(tab, tabs);
+        DrawSmartDropZone();
+        EditorGUILayout.Space(6);
+        DrawStepIndicator();
         EditorGUILayout.Space(10);
 
         scroll = EditorGUILayout.BeginScrollView(scroll);
-        if (tab == 0) DrawItemTab();
-        else if (tab == 1) DrawUpgradeTab();
-        else DrawProjectileTab();
+        switch (currentStep)
+        {
+            case Step.Projectile: DrawProjectileStep(); break;
+            case Step.Item: DrawItemStep(); break;
+            case Step.Upgrade: DrawUpgradeStep(); break;
+        }
         EditorGUILayout.EndScrollView();
     }
 
-    // ---------- ITENS ----------
+    // ---------- NAVEGAÇÃO: zona inteligente + indicador de etapas ----------
 
-    void DrawItemTab()
+    void DrawSmartDropZone()
     {
-        EditorGUILayout.LabelField("Novo Item", EditorStyles.boldLabel);
-        EditorGUILayout.HelpBox("Arraste o prefab do projétil (precisa implementar IThrowable) - o nome é sugerido a partir do nome do prefab. Vira 1 variante com 100% de chance.", MessageType.None);
+        Rect dropRect = GUILayoutUtility.GetRect(0, 40, GUILayout.ExpandWidth(true));
+        GUI.Box(dropRect, "Comece por aqui: arraste um modelo 3D, um Prefab de projétil ou um Item já existente\n(a ferramenta detecta e pula pra etapa certa sozinha)");
 
-        EditorGUI.BeginChangeCheck();
-        itemPrefab = (GameObject)EditorGUILayout.ObjectField("Prefab do Projétil", itemPrefab, typeof(GameObject), false);
-        if (EditorGUI.EndChangeCheck() && itemPrefab != null && string.IsNullOrEmpty(itemName))
-            itemName = itemPrefab.name.Replace("Projectile_", "");
+        Event evt = Event.current;
+        if (!dropRect.Contains(evt.mousePosition)) return;
 
-        if (itemPrefab != null && itemPrefab.GetComponent<IThrowable>() == null)
-            EditorGUILayout.HelpBox("Esse prefab não implementa IThrowable - o estilingue não vai conseguir lançar ele.", MessageType.Warning);
-
-        itemName = EditorGUILayout.TextField("Nome", itemName);
-        EditorGUILayout.LabelField("Descrição");
-        itemDescription = EditorGUILayout.TextArea(itemDescription, GUILayout.Height(40));
-
-        EditorGUILayout.BeginHorizontal();
-        itemIcon = (Sprite)EditorGUILayout.ObjectField("Ícone", itemIcon, typeof(Sprite), false);
-        using (new EditorGUI.DisabledScope(itemPrefab == null))
+        if (evt.type == EventType.DragUpdated)
         {
-            if (GUILayout.Button("Gerar do preview", GUILayout.Width(110)))
-            {
-                GenerateIconFromPreview(itemPrefab, sprite =>
-                {
-                    itemIcon = sprite;
-                    Repaint();
-                });
-            }
+            DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
+            evt.Use();
         }
-        EditorGUILayout.EndHorizontal();
-
-        itemUnlimitedStock = EditorGUILayout.Toggle(new GUIContent("Estoque Ilimitado", "Ex: a pedra - ignora custo e estoque."), itemUnlimitedStock);
-        using (new EditorGUI.DisabledScope(itemUnlimitedStock))
+        else if (evt.type == EventType.DragPerform)
         {
-            itemCost = EditorGUILayout.IntField("Custo", itemCost);
-            itemStockPerPurchase = EditorGUILayout.IntField("Qtd por Compra", itemStockPerPurchase);
-            itemStockLabel = EditorGUILayout.TextField("Rótulo da Qtd", itemStockLabel);
+            DragAndDrop.AcceptDrag();
+            foreach (var obj in DragAndDrop.objectReferences)
+                RouteDroppedObject(obj);
+            evt.Use();
         }
-
-        EditorGUILayout.Space(8);
-        using (new EditorGUI.DisabledScope(itemPrefab == null || string.IsNullOrWhiteSpace(itemName)))
-        {
-            if (GUILayout.Button("Criar Item", GUILayout.Height(28)))
-                CreateItem();
-        }
-
-        EditorGUILayout.Space(10);
-        using (new EditorGUI.DisabledScope(cachedItems == null || cachedItems.Length == 0))
-        {
-            if (GUILayout.Button("Gerar ícones faltantes nos itens existentes"))
-                GenerateMissingIcons();
-        }
-
-        DrawExistingList("Itens existentes", cachedItems?.Select(i => i.itemName).ToArray());
     }
 
-    // Preenche o Ícone de todo ItemDefinition já existente que ainda não tem um, usando o preview
-    // do prefab da primeira variante - pros itens criados antes desse recurso existir.
-    void GenerateMissingIcons()
+    // Decide em qual etapa o objeto solto se encaixa: ItemDefinition -> Upgrade; prefab que já
+    // implementa IThrowable -> Item; qualquer outro GameObject/modelo -> Projétil.
+    void RouteDroppedObject(Object obj)
     {
-        if (cachedItems == null) return;
-
-        int count = 0;
-        foreach (var item in cachedItems)
+        if (obj is ItemDefinition item)
         {
-            if (item == null || item.icon != null) continue;
-
-            GameObject prefab = item.variants != null && item.variants.Length > 0 ? item.variants[0].prefab : null;
-            if (prefab == null)
-            {
-                Debug.LogWarning($"Ferramenta de Conteúdo: '{item.itemName}' não tem prefab na primeira variante - pulei.");
-                continue;
-            }
-
-            count++;
-            ItemDefinition target = item;
-            GenerateIconFromPreview(prefab, sprite =>
-            {
-                if (sprite == null) return;
-
-                target.icon = sprite;
-                EditorUtility.SetDirty(target);
-                AssetDatabase.SaveAssets();
-                Repaint();
-            });
-        }
-
-        Debug.Log(count == 0
-            ? "Ferramenta de Conteúdo: nenhum item sem ícone encontrado."
-            : $"Ferramenta de Conteúdo: gerando ícone pra {count} item(ns) sem ícone...");
-    }
-
-    void CreateItem()
-    {
-        EnsureFolder(ItemFolder);
-        string path = AssetDatabase.GenerateUniqueAssetPath($"{ItemFolder}/{itemName}.asset");
-
-        var asset = CreateInstance<ItemDefinition>();
-        asset.itemName = itemName;
-        asset.description = itemDescription;
-        asset.icon = itemIcon;
-        asset.unlimitedStock = itemUnlimitedStock;
-        asset.cost = itemCost;
-        asset.stockPerPurchase = itemStockPerPurchase;
-        asset.stockLabel = itemStockLabel;
-        asset.variants = new[] { new ProjectileVariant { prefab = itemPrefab, chancePercent = 100f, previousPercent = 100f } };
-
-        AssetDatabase.CreateAsset(asset, path);
-        AssetDatabase.SaveAssets();
-        Selection.activeObject = asset;
-        EditorGUIUtility.PingObject(asset);
-        Debug.Log($"Ferramenta de Conteúdo: criei '{path}'.");
-
-        itemPrefab = null;
-        itemName = "";
-        itemDescription = "";
-        itemIcon = null;
-        RefreshItemCache();
-    }
-
-    // ---------- UPGRADES ----------
-
-    void DrawUpgradeTab()
-    {
-        EditorGUILayout.LabelField("Novo Upgrade", EditorStyles.boldLabel);
-
-        if (cachedItems == null || cachedItems.Length == 0)
-        {
-            EditorGUILayout.HelpBox("Nenhum ItemDefinition encontrado no projeto ainda - crie itens na aba 'Itens' primeiro (um upgrade sempre precisa de um item-alvo).", MessageType.Info);
-            if (GUILayout.Button("Recarregar")) RefreshItemCache();
+            int idx = System.Array.IndexOf(cachedItems, item);
+            if (idx >= 0) upgradeTargetIndex = idx;
+            itemCreated = false;
+            currentStep = Step.Upgrade;
+            Debug.Log($"Ferramenta de Conteúdo: '{item.itemName}' é um Item - indo pra etapa de Upgrade.");
             return;
         }
 
-        upgradeName = EditorGUILayout.TextField("Nome", upgradeName);
-        EditorGUILayout.LabelField("Descrição");
-        upgradeDescription = EditorGUILayout.TextArea(upgradeDescription, GUILayout.Height(40));
-
-        upgradeRarity = (ItemRarity)EditorGUILayout.EnumPopup(new GUIContent("Raridade", "Também decide em qual subpasta o asset é salvo."), upgradeRarity);
-
-        string[] itemNames = cachedItems.Select(i => i.itemName).ToArray();
-        upgradeTargetIndex = Mathf.Clamp(upgradeTargetIndex, 0, itemNames.Length - 1);
-        upgradeTargetIndex = EditorGUILayout.Popup("Item-alvo", upgradeTargetIndex, itemNames);
-
-        upgradeDamageBonus = EditorGUILayout.IntField("Bônus de Dano", upgradeDamageBonus);
-        upgradeCost = EditorGUILayout.IntField("Custo", upgradeCost);
-
-        EditorGUILayout.Space(8);
-        using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(upgradeName)))
+        if (obj is GameObject go)
         {
-            if (GUILayout.Button("Criar Upgrade", GUILayout.Height(28)))
-                CreateUpgrade();
+            if (go.GetComponent<IThrowable>() != null)
+            {
+                itemPrefab = go;
+                itemName = go.name.Replace("Projectile_", "");
+                projectileCreated = false;
+                currentStep = Step.Item;
+                Debug.Log($"Ferramenta de Conteúdo: '{go.name}' já implementa IThrowable - indo pra etapa de Item.");
+            }
+            else
+            {
+                projModel = go;
+                projName = go.name;
+                currentStep = Step.Projectile;
+                Debug.Log($"Ferramenta de Conteúdo: '{go.name}' reconhecido como modelo 3D - indo pra etapa de Projétil.");
+            }
+            return;
         }
 
-        string folder = $"{UpgradeFolderRoot}/{upgradeRarity}";
-        string[] existing = AssetDatabase.IsValidFolder(folder)
-            ? AssetDatabase.FindAssets("t:UpgradeDefinition", new[] { folder })
-                .Select(guid => Path.GetFileNameWithoutExtension(AssetDatabase.GUIDToAssetPath(guid)))
-                .ToArray()
-            : new string[0];
-        DrawExistingList($"Upgrades existentes em {upgradeRarity}", existing);
+        Debug.LogWarning($"Ferramenta de Conteúdo: não reconheço '{obj.name}' - arraste um modelo 3D, um Prefab de projétil (IThrowable) ou um ItemDefinition.");
     }
 
-    void CreateUpgrade()
+    void DrawStepIndicator()
     {
-        string folder = $"{UpgradeFolderRoot}/{upgradeRarity}";
-        EnsureFolder(folder);
-        string path = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{upgradeName}.asset");
-
-        var asset = CreateInstance<UpgradeDefinition>();
-        asset.upgradeName = upgradeName;
-        asset.description = upgradeDescription;
-        asset.rarity = upgradeRarity;
-        asset.targetItem = cachedItems[upgradeTargetIndex];
-        asset.damageBonus = upgradeDamageBonus;
-        asset.cost = upgradeCost;
-
-        AssetDatabase.CreateAsset(asset, path);
-        AssetDatabase.SaveAssets();
-        Selection.activeObject = asset;
-        EditorGUIUtility.PingObject(asset);
-        Debug.Log($"Ferramenta de Conteúdo: criei '{path}'.");
-
-        upgradeName = "";
-        upgradeDescription = "";
+        EditorGUILayout.BeginHorizontal();
+        DrawStepButton("① Projétil", Step.Projectile);
+        GUILayout.Label("→", GUILayout.Width(18));
+        DrawStepButton("② Item", Step.Item);
+        GUILayout.Label("→", GUILayout.Width(18));
+        DrawStepButton("③ Upgrade", Step.Upgrade);
+        EditorGUILayout.EndHorizontal();
     }
 
-    // ---------- PROJÉTIL ----------
+    void DrawStepButton(string label, Step step)
+    {
+        Color previous = GUI.backgroundColor;
+        if (currentStep == step) GUI.backgroundColor = new Color(0.55f, 0.8f, 1f);
 
-    void DrawProjectileTab()
+        if (GUILayout.Button(label, GUILayout.Height(26)))
+            currentStep = step;
+
+        GUI.backgroundColor = previous;
+    }
+
+    // ---------- ETAPA 1: PROJÉTIL ----------
+
+    void DrawProjectileStep()
     {
         if (!projTemplateLoaded)
         {
@@ -283,8 +196,23 @@ public class ShopContentToolWindow : EditorWindow
             projTemplateLoaded = true;
         }
 
-        EditorGUILayout.LabelField("Novo Prefab de Projétil", EditorStyles.boldLabel);
-        EditorGUILayout.HelpBox("Arraste o modelo 3D (prefab/FBX da MinionsArt etc.) - crio um prefab com a mesma estrutura do Projectile_Bomb (raiz com Rigidbody + Projectile_Bomb, filho 'Visual' com o modelo, filho 'Collider' com uma SphereCollider já ajustada ao tamanho do modelo). Ao terminar, já pulo pra aba Itens com esse prefab preenchido.", MessageType.None);
+        if (projectileCreated)
+        {
+            EditorGUILayout.HelpBox($"✓ Prefab '{lastProjectileName}' criado em {ProjectilePrefabFolder}/.", MessageType.Info);
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Criar Item com esse prefab →", GUILayout.Height(26)))
+            {
+                projectileCreated = false;
+                currentStep = Step.Item;
+            }
+            if (GUILayout.Button("Criar outro Projétil", GUILayout.Height(26)))
+                projectileCreated = false;
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(12);
+        }
+
+        EditorGUILayout.LabelField("Etapa 1 — Prefab do Projétil", EditorStyles.boldLabel);
+        EditorGUILayout.HelpBox("Ponto de partida se você só tem o modelo 3D ainda. Arraste ele aqui (prefab/FBX) e a ferramenta monta um prefab completo: raiz com Rigidbody + Projectile_Bomb, filho 'Visual' com o modelo, filho 'Collider' com uma SphereCollider já ajustada ao tamanho real do modelo. Se você já tem um prefab de projétil pronto, pode pular direto pra Etapa 2.", MessageType.None);
 
         EditorGUI.BeginChangeCheck();
         projModel = (GameObject)EditorGUILayout.ObjectField("Modelo 3D", projModel, typeof(GameObject), false);
@@ -313,10 +241,13 @@ public class ShopContentToolWindow : EditorWindow
             if (GUILayout.Button("Criar Prefab do Projétil", GUILayout.Height(28)))
                 CreateProjectilePrefab();
         }
+
+        EditorGUILayout.Space(14);
+        EditorGUILayout.HelpBox("Já tem um prefab pronto (implementa IThrowable, ex: Bomb, Stone)? Não precisa passar por aqui - vá direto pra Etapa 2 (② Item) ou arraste ele na zona inteligente no topo.", MessageType.None);
     }
 
     // Puxa layer e explosão/escala padrão do Projectile_Bomb existente, só na primeira vez que a
-    // aba abre - assim novo projétil já nasce com uma explosão de verdade em vez de nada.
+    // etapa abre - assim novo projétil já nasce com uma explosão de verdade em vez de nada.
     void LoadProjectileTemplateDefaults()
     {
         GameObject template = AssetDatabase.LoadAssetAtPath<GameObject>(TemplatePrefabPath);
@@ -392,23 +323,257 @@ public class ShopContentToolWindow : EditorWindow
         Debug.Log($"Ferramenta de Conteúdo: criei '{path}'.");
         EditorGUIUtility.PingObject(savedPrefab);
 
-        // encadeia direto pra aba Itens, já com o prefab novo preenchido - só falta custo/estoque.
+        // pré-preenche a etapa Item (caso o usuário escolha avançar) e já dispara a geração do
+        // ícone em paralelo - quando terminar, preenche o campo Ícone sozinho.
         itemPrefab = savedPrefab;
         itemName = projName;
         itemIcon = null;
-        tab = 0;
-        Repaint();
-
-        // gera o ícone a partir do preview do prefab recém-criado, em paralelo (assíncrono) -
-        // quando terminar já preenche o campo Ícone da aba Itens sozinho.
         GenerateIconFromPreview(savedPrefab, sprite =>
         {
             itemIcon = sprite;
             Repaint();
         });
 
+        lastProjectileName = projName;
+        projectileCreated = true;
+
         projModel = null;
         projName = "";
+        Repaint();
+    }
+
+    // ---------- ETAPA 2: ITEM ----------
+
+    void DrawItemStep()
+    {
+        if (itemCreated)
+        {
+            EditorGUILayout.HelpBox($"✓ Item '{lastItem.itemName}' criado.", MessageType.Info);
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Criar Upgrade pra esse Item →", GUILayout.Height(26)))
+            {
+                int idx = System.Array.IndexOf(cachedItems, lastItem);
+                if (idx >= 0) upgradeTargetIndex = idx;
+                itemCreated = false;
+                currentStep = Step.Upgrade;
+            }
+            if (GUILayout.Button("Criar outro Item", GUILayout.Height(26)))
+                itemCreated = false;
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(12);
+        }
+
+        EditorGUILayout.LabelField("Etapa 2 — Item da Loja", EditorStyles.boldLabel);
+        EditorGUILayout.HelpBox("Transforma um prefab de projétil num item comprável na loja. Arraste o prefab (precisa implementar IThrowable - a Etapa 1 já garante isso, ou use um pronto como Bomb/Stone). Vira 1 variante com 100% de chance.", MessageType.None);
+
+        EditorGUI.BeginChangeCheck();
+        itemPrefab = (GameObject)EditorGUILayout.ObjectField("Prefab do Projétil", itemPrefab, typeof(GameObject), false);
+        if (EditorGUI.EndChangeCheck() && itemPrefab != null && string.IsNullOrEmpty(itemName))
+            itemName = itemPrefab.name.Replace("Projectile_", "");
+
+        if (itemPrefab != null && itemPrefab.GetComponent<IThrowable>() == null)
+            EditorGUILayout.HelpBox("Esse prefab não implementa IThrowable - o estilingue não vai conseguir lançar ele.", MessageType.Warning);
+
+        itemName = EditorGUILayout.TextField("Nome", itemName);
+        EditorGUILayout.LabelField("Descrição");
+        itemDescription = EditorGUILayout.TextArea(itemDescription, GUILayout.Height(40));
+
+        EditorGUILayout.BeginHorizontal();
+        itemIcon = (Sprite)EditorGUILayout.ObjectField("Ícone", itemIcon, typeof(Sprite), false);
+        using (new EditorGUI.DisabledScope(itemPrefab == null))
+        {
+            if (GUILayout.Button("Gerar do preview", GUILayout.Width(110)))
+            {
+                GenerateIconFromPreview(itemPrefab, sprite =>
+                {
+                    itemIcon = sprite;
+                    Repaint();
+                });
+            }
+        }
+        EditorGUILayout.EndHorizontal();
+
+        itemUnlimitedStock = EditorGUILayout.Toggle(new GUIContent("Estoque Ilimitado", "Ex: a pedra - ignora custo e estoque."), itemUnlimitedStock);
+        using (new EditorGUI.DisabledScope(itemUnlimitedStock))
+        {
+            itemCost = EditorGUILayout.IntField("Custo", itemCost);
+            itemStockPerPurchase = EditorGUILayout.IntField("Qtd por Compra", itemStockPerPurchase);
+            itemStockLabel = EditorGUILayout.TextField("Rótulo da Qtd", itemStockLabel);
+        }
+
+        EditorGUILayout.Space(8);
+        using (new EditorGUI.DisabledScope(itemPrefab == null || string.IsNullOrWhiteSpace(itemName)))
+        {
+            if (GUILayout.Button("Criar Item", GUILayout.Height(28)))
+                CreateItem();
+        }
+
+        EditorGUILayout.Space(10);
+        using (new EditorGUI.DisabledScope(cachedItems == null || cachedItems.Length == 0))
+        {
+            if (GUILayout.Button("Gerar ícones faltantes nos itens existentes"))
+                GenerateMissingIcons();
+        }
+
+        EditorGUILayout.Space(14);
+        EditorGUILayout.HelpBox("Já tem um Item pronto e só quer criar um Upgrade pra ele? Vá direto pra Etapa 3 (③ Upgrade) ou arraste o ItemDefinition na zona inteligente no topo.", MessageType.None);
+
+        DrawExistingList("Itens existentes", cachedItems?.Select(i => i.itemName).ToArray());
+    }
+
+    // Preenche o Ícone de todo ItemDefinition já existente que ainda não tem um, usando o preview
+    // do prefab da primeira variante - pros itens criados antes desse recurso existir.
+    void GenerateMissingIcons()
+    {
+        if (cachedItems == null) return;
+
+        int count = 0;
+        foreach (var item in cachedItems)
+        {
+            if (item == null || item.icon != null) continue;
+
+            GameObject prefab = item.variants != null && item.variants.Length > 0 ? item.variants[0].prefab : null;
+            if (prefab == null)
+            {
+                Debug.LogWarning($"Ferramenta de Conteúdo: '{item.itemName}' não tem prefab na primeira variante - pulei.");
+                continue;
+            }
+
+            count++;
+            ItemDefinition target = item;
+            GenerateIconFromPreview(prefab, sprite =>
+            {
+                if (sprite == null) return;
+
+                target.icon = sprite;
+                EditorUtility.SetDirty(target);
+                AssetDatabase.SaveAssets();
+                Repaint();
+            });
+        }
+
+        Debug.Log(count == 0
+            ? "Ferramenta de Conteúdo: nenhum item sem ícone encontrado."
+            : $"Ferramenta de Conteúdo: gerando ícone pra {count} item(ns) sem ícone...");
+    }
+
+    void CreateItem()
+    {
+        EnsureFolder(ItemFolder);
+        string path = AssetDatabase.GenerateUniqueAssetPath($"{ItemFolder}/{itemName}.asset");
+
+        var asset = CreateInstance<ItemDefinition>();
+        asset.itemName = itemName;
+        asset.description = itemDescription;
+        asset.icon = itemIcon;
+        asset.unlimitedStock = itemUnlimitedStock;
+        asset.cost = itemCost;
+        asset.stockPerPurchase = itemStockPerPurchase;
+        asset.stockLabel = itemStockLabel;
+        asset.variants = new[] { new ProjectileVariant { prefab = itemPrefab, chancePercent = 100f, previousPercent = 100f } };
+
+        AssetDatabase.CreateAsset(asset, path);
+        AssetDatabase.SaveAssets();
+        Selection.activeObject = asset;
+        EditorGUIUtility.PingObject(asset);
+        Debug.Log($"Ferramenta de Conteúdo: criei '{path}'.");
+
+        RefreshItemCache();
+        lastItem = AssetDatabase.LoadAssetAtPath<ItemDefinition>(path);
+        itemCreated = true;
+
+        itemPrefab = null;
+        itemName = "";
+        itemDescription = "";
+        itemIcon = null;
+    }
+
+    // ---------- ETAPA 3: UPGRADE ----------
+
+    void DrawUpgradeStep()
+    {
+        if (upgradeCreated)
+        {
+            EditorGUILayout.HelpBox($"✓ Upgrade '{lastUpgradeName}' criado.", MessageType.Info);
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Criar outro Upgrade pro mesmo Item", GUILayout.Height(26)))
+                upgradeCreated = false;
+            if (GUILayout.Button("Concluir (voltar ao início)", GUILayout.Height(26)))
+            {
+                upgradeCreated = false;
+                currentStep = Step.Projectile;
+            }
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(12);
+        }
+
+        EditorGUILayout.LabelField("Etapa 3 — Upgrade", EditorStyles.boldLabel);
+        EditorGUILayout.HelpBox("Cria um bônus de dano sorteável na loja, mirando num Item já existente.", MessageType.None);
+
+        if (cachedItems == null || cachedItems.Length == 0)
+        {
+            EditorGUILayout.HelpBox("Nenhum ItemDefinition encontrado no projeto ainda - um upgrade sempre precisa de um item-alvo.", MessageType.Warning);
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Recarregar")) RefreshItemCache();
+            if (GUILayout.Button("Ir pra Etapa 2 — Item")) currentStep = Step.Item;
+            EditorGUILayout.EndHorizontal();
+            return;
+        }
+
+        upgradeName = EditorGUILayout.TextField("Nome", upgradeName);
+        EditorGUILayout.LabelField("Descrição");
+        upgradeDescription = EditorGUILayout.TextArea(upgradeDescription, GUILayout.Height(40));
+
+        upgradeRarity = (ItemRarity)EditorGUILayout.EnumPopup(new GUIContent("Raridade", "Também decide em qual subpasta o asset é salvo."), upgradeRarity);
+
+        string[] itemNames = cachedItems.Select(i => i.itemName).ToArray();
+        upgradeTargetIndex = Mathf.Clamp(upgradeTargetIndex, 0, itemNames.Length - 1);
+        upgradeTargetIndex = EditorGUILayout.Popup("Item-alvo", upgradeTargetIndex, itemNames);
+
+        upgradeDamageBonus = EditorGUILayout.IntField("Bônus de Dano", upgradeDamageBonus);
+        upgradeCost = EditorGUILayout.IntField("Custo", upgradeCost);
+
+        EditorGUILayout.Space(8);
+        using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(upgradeName)))
+        {
+            if (GUILayout.Button("Criar Upgrade", GUILayout.Height(28)))
+                CreateUpgrade();
+        }
+
+        string folder = $"{UpgradeFolderRoot}/{upgradeRarity}";
+        string[] existing = AssetDatabase.IsValidFolder(folder)
+            ? AssetDatabase.FindAssets("t:UpgradeDefinition", new[] { folder })
+                .Select(guid => Path.GetFileNameWithoutExtension(AssetDatabase.GUIDToAssetPath(guid)))
+                .ToArray()
+            : new string[0];
+        DrawExistingList($"Upgrades existentes em {upgradeRarity}", existing);
+    }
+
+    void CreateUpgrade()
+    {
+        string folder = $"{UpgradeFolderRoot}/{upgradeRarity}";
+        EnsureFolder(folder);
+        string path = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{upgradeName}.asset");
+
+        var asset = CreateInstance<UpgradeDefinition>();
+        asset.upgradeName = upgradeName;
+        asset.description = upgradeDescription;
+        asset.rarity = upgradeRarity;
+        asset.targetItem = cachedItems[upgradeTargetIndex];
+        asset.damageBonus = upgradeDamageBonus;
+        asset.cost = upgradeCost;
+
+        AssetDatabase.CreateAsset(asset, path);
+        AssetDatabase.SaveAssets();
+        Selection.activeObject = asset;
+        EditorGUIUtility.PingObject(asset);
+        Debug.Log($"Ferramenta de Conteúdo: criei '{path}'.");
+
+        lastUpgradeName = upgradeName;
+        upgradeCreated = true;
+
+        upgradeName = "";
+        upgradeDescription = "";
     }
 
     // ---------- ÍCONE (preview do Editor assado em Sprite) ----------

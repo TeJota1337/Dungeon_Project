@@ -17,11 +17,11 @@ using UnityEngine;
 // ou Assets/Prefabs), criando a pasta se precisar.
 public class ShopContentToolWindow : EditorWindow
 {
-    const string ItemFolder = "Assets/SO/Item Definitions";
-    const string UpgradeFolderRoot = "Assets/SO/Upgrades";
-    const string ProjectilePrefabFolder = "Assets/Prefabs";
-    const string TemplatePrefabPath = "Assets/Prefabs/Projectile_Bomb.prefab";
-    const string IconFolder = "Assets/SO/Item Definitions/Icons";
+    const string ItemFolder = "Assets/_Game/SO/Item Definitions";
+    const string UpgradeFolderRoot = "Assets/_Game/SO/Upgrades";
+    const string ProjectilePrefabFolder = "Assets/_Game/Prefabs/Projectiles";
+    const string TemplatePrefabPath = "Assets/_Game/Prefabs/Projectiles/Projectile_Bomb.prefab";
+    const string IconFolder = "Assets/_Game/SO/Item Definitions/Icons";
 
     enum Step { Projectile, Item, Upgrade }
     Step currentStep = Step.Projectile;
@@ -648,7 +648,7 @@ public class ShopContentToolWindow : EditorWindow
     }
 
     // Cria a pasta (e os pais que faltarem) se ainda não existir - assim não precisa deixar
-    // "Assets/SO/Upgrades/Mitico" pré-criada só pra poder usar a ferramenta.
+    // "Assets/_Game/SO/Upgrades/Mitico" pré-criada só pra poder usar a ferramenta.
     static void EnsureFolder(string path)
     {
         if (AssetDatabase.IsValidFolder(path)) return;

@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d8e1b6d100b3f244b899878b9d4bc533, type: 3}
+  m_Name: Tabela de Raridade
+  m_EditorClassIdentifier: Assembly-CSharp::ShopRarityTable
+  weights:
+  - rarity: 0
+    chancePercent: 24.2
+    previousPercent: 24.2
+  - rarity: 1
+    chancePercent: 35.393024
+    previousPercent: 35.393024
+  - rarity: 2
+    chancePercent: 22.748941
+    previousPercent: 22.748941
+  - rarity: 3
+    chancePercent: 10.689353
+    previousPercent: 10.689353
+  - rarity: 4
+    chancePercent: 5.0521197
+    previousPercent: 5.0521197
+  - rarity: 5
+    chancePercent: 1.9165645
+    previousPercent: 1.9165645

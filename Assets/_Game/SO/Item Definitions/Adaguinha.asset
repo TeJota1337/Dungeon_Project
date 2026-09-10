@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c5e82b618bd5e324cacb420ddc0b3e7f, type: 3}
+  m_Name: Adaguinha
+  m_EditorClassIdentifier: Assembly-CSharp::ItemDefinition
+  itemName: Adaguinha
+  icon: {fileID: 21300000, guid: 91a598aca3ca78849b38fc8ca2b14775, type: 3}
+  description: Adaguinha hehe
+  variants:
+  - prefab: {fileID: 6182180931321440971, guid: 24ed4c9d76a17494b89d7587f3a9d3e3, type: 3}
+    chancePercent: 100
+    previousPercent: 100
+  unlimitedStock: 0
+  cost: 999
+  stockPerPurchase: 1000
+  stockLabel: unidades

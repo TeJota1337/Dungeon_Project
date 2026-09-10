@@ -30,6 +30,11 @@ public class SpawnManager : MonoBehaviour
 {
     public static SpawnManager Instance { get; private set; }
 
+    // Avisa quem quiser saber qual wave começou/terminou - ex: PortalTorch usa isso pra ligar/
+    // desligar a chama do portal conforme ele está ou não spawnando nessa wave.
+    public static event System.Action<WaveConfig> OnWaveStarted;
+    public static event System.Action OnWaveEnded;
+
     public GameObject enemyPrefab;
 
     [Tooltip("As waves da run, em ordem. A run termina em vitória ao completar a última (GDD 2, seção 2).")]
@@ -68,11 +73,13 @@ public class SpawnManager : MonoBehaviour
         for (int i = 0; i < waves.Length; i++)
         {
             CurrentWaveIndex = i;
+            OnWaveStarted?.Invoke(waves[i]);
             yield return StartCoroutine(RunWave(waves[i]));
 
             // espera o campo ficar vazio antes de considerar a wave "limpa" - só então
             // decide se acabou a run (última wave) ou libera a próxima
             yield return new WaitUntil(() => EnemyAI.ActiveCount == 0);
+            OnWaveEnded?.Invoke();
 
             bool isLastWave = i == waves.Length - 1;
             if (isLastWave)

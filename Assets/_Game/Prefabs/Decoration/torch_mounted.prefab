@@ -140,8 +140,37 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: 62a2efe94d359c64f86f4675d021bced, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2418802689588157339}
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 62a2efe94d359c64f86f4675d021bced, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1698966224346415059}
   m_SourcePrefab: {fileID: 100100000, guid: 62a2efe94d359c64f86f4675d021bced, type: 3}
+--- !u!1 &5995223696351596388 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 62a2efe94d359c64f86f4675d021bced, type: 3}
+  m_PrefabInstance: {fileID: 6913652020625257013}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1698966224346415059
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5995223696351596388}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f5349cc79d34cd1459b20369b00d1612, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TorchFlicker
+  baseIntensity: 4
+  intensityVariation: 1.5
+  flickerSpeed: 8
+  varyRange: 1
+  baseRange: 3.5
+  rangeVariation: 0.3
+  varyColor: 0
+  colorA: {r: 1, g: 0.55, b: 0.15, a: 1}
+  colorB: {r: 1, g: 0.75, b: 0.3, a: 1}
 --- !u!4 &6374986682340136414 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 62a2efe94d359c64f86f4675d021bced, type: 3}
